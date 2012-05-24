@@ -1,1 +1,6 @@
-there is another change
+REQUIRMENTS: 
+	-Perl needs to be installed.
+	-MySQL needs to be installed.
+	-The DBI perl module may need to be installed.
+
+EXECUTION:
