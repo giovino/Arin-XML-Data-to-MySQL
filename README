@@ -2,5 +2,18 @@ REQUIRMENTS:
 	-Perl needs to be installed.
 	-MySQL needs to be installed.
 	-The DBI perl module may need to be installed.
+	-The XML::LibXML::Reader will need to be installed. 
+
+INSTALLATION:
+-Ubuntu 12.04 LTS
+    Libxml2-dev and libxml2 are c libraries that are needed by XML::LibXML::Reader. Or you will have issues.
+        a) sudo apt-get install libxml2-dev 
+        b) sudo apt-get install libxml2
+    Once the libraries are installed then install libxml-libxml-perl to install XML::LibXML::Reader. Or
+    you could simply intall the module via cpan.
+        c) sudo apt-get install libxml-libxml-perl
+    Another library that may be needed is zlib. I would recommend installing this library if you want to 
+    use other xml related modules.
+        d) sudo apt-get install zlib1g-dev
 
 EXECUTION:
