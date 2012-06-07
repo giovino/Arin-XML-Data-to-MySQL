@@ -26,37 +26,32 @@ dumpXMLToSQLDB($xmlPath, undef, undef, undef, undef, undef, undef, 1, 1);
 #  dump file stores all of the inportant values in elements. The 
 #  end result will be a set of tables in 3nd normal form.
 #
-#   @todo add future support for attributes when nessesary.
-#
 #   @param .xml file path relative to the perl script directory.
-
+#
 #       been created. If not then an error will be thrown.
-#   @param the username.
-#   @param the password.
-#   @param the address of the host.
+#   @param the type of dbms to connect to. 
+#   @param username.
+#   @param password.
+#   @param the address of the database host.
 #   @param the port to access on the host.
-#   @param @optional pass in 1 to turn on verbal mode.
-#   @param @optional pass in 1 to turn on debugging.
+#   @param @optional dropdatabase => [boolean value] 1 or 0 to drop the database
+#       before parsing the xml. This will default to 0. If 0 is set then the 
+#       function will only update the database. Otherwise it will create a new 
+#       database.
+#   @param @optional verbose => [boolean value] 1 or 0 to turn on or off verbal mode.
+#   @param @optional debug => [boolean value] 1 or 0 to turn on or off debug mode.
 sub dumpXMLToSQLDB {
     my $xmlPath     = shift;
-    my $platform    = shift;
-    my $database    = shift;
-    my $username    = shift;
-    my $password    = shift;
-    my $host        = shift;
-    my $port        = shift;
-    my $verbal      = (shift) ? 1 : 0;
-    my $debug       = (shift) ? 1 : 0;
+    my $dbms = undef;
+    my $hostaddress = undef;
+    my $port = undef;
+    my $username = undef;
+    my $password = undef;
 
-    
-    #Attempting to use a feature called slurp. The goal is to load the file into memory for 
-    # faster processing.
-#    my $xmlData = "";
-#    {
-#        local( $/, *FH ) ;
-#        open(FH, $xmlPath ) or die "Failed to open the file.\n";
-#        $xmlData = <FH>;
-#    }
+    #Initialize optional variables.
+    my %args        = @_;
+    my $debug = ($args{'debug'}) ? $args{'debug'} : 0;
+    my $verbose = ($args{'verbose'}) ? $args{'verbose'} : 0;
 
     #@TODO Remember to tell the user if the file path is invalid.
     my $xmlReader = XML::LibXML::Reader->new('location' => $xmlPath, 

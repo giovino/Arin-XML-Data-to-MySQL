@@ -1,0 +1,7 @@
+REQUIRMENTS: 
+	-Perl needs to be installed.
+	-MySQL needs to be installed.
+	-The DBI perl module may need to be installed.
+	-The XML::LibXML::Reader will need to be installed.
+
+EXECUTION:
