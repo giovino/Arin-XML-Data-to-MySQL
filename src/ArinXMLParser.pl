@@ -110,14 +110,16 @@ sub dumpXMLToSQLDB {
             my %parsedXML = ();
             $parsedXML{$xmlReader->name} = XMLin($xmlReader->readOuterXml(), ForceContent => 0, ForceArray => 0,  ContentKey => ELEMENT_TEXT);
             
-            print Dumper \%parsedXML;
+#            print Dumper \%parsedXML;
             
             $xmlReader->next();
             $counter++; 
              
             #Now take that has and push it into the MySQL database.   
             #Convert the multi-dimensional hash into a set of tables.
-            # @TODO hashToTables(%hashToConvert);
+            simpleHashToSql(\%parsedXML, undef, ELEMENT_TEXT, debug => 1);
+            exit;
+
         }#END IF
     }#END WHILE
     
@@ -131,17 +133,43 @@ sub dumpXMLToSQLDB {
 # from the XML::Simple module. The function expects that when calling
 # XMLin ForceContent and ForceArray have been set to zero. Once the
 # variables have been passed in the function will recursivly build
-# the tables in the database.
+# the tables in the database. @TODO the output of XMLin has to have 
+# a key assigned to it.
 #
 #   @param a hash reference to the data you wish to dump.
 #   @param a dbi object that has been connect to the database.
 #   @param the key used to store the content of the element.
+#   @param @optional debug => 'boolean value' 1 or 0 to turn debug on 
+#       or off.
+#   @param @optional verbose => 'boolean value'. 1 or 0 to turn verbose
+#       mode on or off.
+#   @param @optional table => 'name'. The table the data will be added
+#       to.
+#   @TODO @param @optional parentTable => 'name'. The table that this table should
+#       be joined to. Implement later this part later.
 #
 sub simpleHashToSql {
     my $xmlHashRef = shift;
     my $dbi = shift;
     my $contentKey = shift;
 
+    my %args        = @_; 
+    my $debug       = ($args{'debug'}) ? $args{'debug'} : 0;
+    my $verbose     = ($args{'verbose'}) ? $args{'verbose'} : 0;
+
+#    print Dumper $xmlHashRef;
+
+    #Need a better tactic. The loop and recurse isn't sufficient. 
+    # Find all of the key => HASH relationships in the hash. That
+    # will be used to construct the table.
+    my @columns = ();
+    my @tables = ();
+    while(my ($key, $value) = each %$xmlHashRef) {
+        my $type = (ref $value) ? ref $value : ref \$value;
+        print "$key => $type\n";
+    }
+
+    return;
     #Loop through all of the keys. If a key points to a 
     # hash then call this function and pass in the hash.
     # If the key points to an array then go through each 
@@ -151,19 +179,36 @@ sub simpleHashToSql {
    foreach my $key (keys %$xmlHashRef) {
         #Recursive call.
         if(ref(${$xmlHashRef}{$key}) eq "ARRAY") {
-            print "Found an array. Iterate and recurse.\n";
+            print "Found an array. Iterate and recurse.\n" if ($debug);
             foreach(@{${$xmlHashRef}{$key}}) {
-                simpleHashToSql($_, $dbi, $contentKey);
+                print "Hash in the array. Recurse.\n" if ($debug);
+                simpleHashToSql($_, $dbi, $contentKey, debug => $debug);
             }
         }
         #Recursive call.
-        elsif(ref(${$xmlHashRef}{$key} eq "HASH") {
-            print "Found a hash. Recurse.\n";
-            simpleHashToSql(${$xmlHashRef}{$key}, $dbi, $contentKey);
+        elsif(ref(${$xmlHashRef}{$key}) eq "HASH") {
+            print "Found a hash. Recurse.\n" if ($debug);
+            simpleHashToSql(${$xmlHashRef}{$key}, $dbi, $contentKey, debug => $debug);
+
         }
         #Perform insert.
-        elsif(ref(${$xmlHashRef}{$key} eq "SCALAR") {
+        elsif(ref(\${$xmlHashRef}{$key}) eq "SCALAR") {
             #@TODO INSERT HERE.
+            print "Performing an insert on:\n"  if ($debug);
+            print "\t->".${$xmlHashRef}{$key}."\n"  if ($debug);
+            
+        }
+        else {
+            print "Unexpected value detected." if($debug || $verbose);
+            print "Performing a dump and dieing." if($debug);
+            print "\n" if($debug || $verbose);
+            
+            if($debug) {
+                my $type = ref(\${$xmlHashRef}{$key});
+                print "The type is  $type \n";
+                print Dumper ${$xmlHashRef}{$key};
+                die;
+            }
         }
    }#END FOREACH
 }
