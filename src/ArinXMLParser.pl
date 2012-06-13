@@ -118,7 +118,7 @@ sub dumpXMLToSQLDB {
             #Now take that has and push it into the MySQL database.   
             #Convert the multi-dimensional hash into a set of tables.
             simpleHashToSql(\%parsedXML, undef, ELEMENT_TEXT, debug => 1);
-            exit;
+#            exit;
 
         }#END IF
     }#END WHILE
@@ -156,23 +156,64 @@ sub simpleHashToSql {
     my %args        = @_; 
     my $debug       = ($args{'debug'}) ? $args{'debug'} : 0;
     my $verbose     = ($args{'verbose'}) ? $args{'verbose'} : 0;
+    my $table       = ($args{'table'}) ? $args{'table'} : 0; #get the name of the table to create.
+    my $parentTable = ($args{'parentTable'}) ? $args{'parentTable'} : 0; #get the name of the parent table.
 
-#    print Dumper $xmlHashRef;
+    print Dumper $xmlHashRef;
 
     #Need a better tactic. The loop and recurse isn't sufficient. 
     # Find all of the key => HASH relationships in the hash. That
     # will be used to construct the table.
-    my @columns = ();
-    my @tables = ();
-    while(my ($key, $value) = each %$xmlHashRef) {
+    my @columnarData = (); #data that can be added to the current table.
+    my @subTables = (); #data that has to be added to a seperate table and then later joined.
+    while(my ($key, $value) = each %$xmlHashRef) { #iterate over the hash.
+        #ref returns undef if $value is a scalar. Therefore
+        # pass in the ref of $value to get its type.
         my $type = (ref $value) ? ref $value : ref \$value;
-        print "$key => $type\n";
+        print "$key => $type\n" if ($debug);
+
+        if($type eq "HASH") {
+            push(@subTables, {$key => $value}); #push the hash into the array
+        }
+        elsif($type eq "SCALAR") {
+            push(@columnarData, {$key => $value}); #push the single element hash into the array.
+        }
+        elsif($type eq "ARRAY") {
+
+        }
+        else {
+            die "Uncaught data type.";
+        }
     }
+
+    #Now that everything has been sorted begin building the table.
+    my @columns = ();
+    map {my $key = each %$_; push @columns, $key;} @columnarData;
+    map {print "Col: $_\n"} @columns if ($debug);
+
+    #Go through the subTables and construct sql tables. 
+    foreach(@subTables) { 
+        #If no table name has been passed into the parser then assume that
+        # the key is the name of the 
+    }
+
+#    print Dumper \@subTablbes;exit;
 
     return;
     #Loop through all of the keys. If a key points to a 
     # hash then call this function and pass in the hash.
-    # If the key points to an array then go through each 
+    # If the key poif($type eq "HASH") {
+    # 176             push(@tables, {$key => $value}); #push the hash into the array
+    # 177         }
+    # 178         elsif($type eq "SCALAR") {
+    # 179             push(@columns, {$key => $value}); #push the single element hash into the array.
+    # 180         }
+    # 181         elsif($type eq "ARRAY") {
+    # 182         
+    # 183         }
+    # 184         else {
+    # 185             die "Uncaught data type.";
+    # 186         }nts to an array then go through each 
     # element and call this function on each element. 
     # If the key points to a scalar then perform an 
     # insert.
