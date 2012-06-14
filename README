@@ -1,8 +1,9 @@
 REQUIRMENTS: 
 	-Perl needs to be installed.
-	-MySQL needs to be installed.
-	-The DBI perl module may need to be installed.
-	-The XML::LibXML::Reader will need to be installed. 
+	-A database needs to be installed. (Right now we have only tested with MySQL)
+	-The DBIx::Class module needs to be installed.
+        -The DBIx::Class::Schema has a 'deploy' feature.
+        -The XML::LibXML::Reader will need to be installed. 
 
 INSTALLATION:
 -Ubuntu 12.04 LTS
@@ -15,5 +16,12 @@ INSTALLATION:
     Another library that may be needed is zlib. I would recommend installing this library if you want to 
     use other xml related modules.
         d) sudo apt-get install zlib1g-dev
+    You will also need the DBIx::Class modules. 
+        e) cpan DBIx::Class.
+
+OTHER TOOLS:
+    Another usefull tool is dbicdump.pl. This script takes an existing database and dumps it into it into a set of modules that inherit from DBIx::Class::Schema and DBIx::Class::Core. This is the command I used on my test database. 
+    -perl dbicdump.pl -o dump_directory=oldbulkwhoisdump -o components='["InflateColumn::DateTime"]' MyApp::Schema dbi:mysql:arin root 12345
+   
 
 EXECUTION:
