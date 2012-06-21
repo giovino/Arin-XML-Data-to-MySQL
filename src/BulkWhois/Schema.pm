@@ -6,7 +6,6 @@
 package BulkWhois::Schema;
 use base qw/DBIx::Class::Schema/;
 
-use BulkWhois::Schema::Asns;
 use strict;
 use warnings;
 
