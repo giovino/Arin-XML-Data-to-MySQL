@@ -122,7 +122,7 @@ sub dumpXMLToSQLDB {
     #database.
     print "Begin reading\n" if($debug);
     
-    my $BUFFER_SIZE = 1000; #@TODO remove this variable once done debugging this script.
+    my $BUFFER_SIZE = 2000; #@TODO remove this variable once done debugging this script.
     my @insertBuffer = ();
     while($xmlReader->read()) {
         #Go through all of the child elements of the root node. Use XML::Simple

@@ -13,10 +13,10 @@ use BulkWhois::Schema;
 use Scalar::Util 'blessed';
 
 my $TABLES = {
-        'asns' => [qw/asnHandle ref startAsNumber endAsNumber name registrationDate updateDate/]
+        'Asns' => [qw/asnHandle ref startAsNumber endAsNumber name registrationDate updateDate/]
 };
 my $XML_TO_COLUMN_MAPPINGS = {
-        'asns' => {
+        'Asns' => {
             ${$TABLES->{'asns'}}[0] => 'handle',
             ${$TABLES->{'asns'}}[1] => 'ref',
             ${$TABLES->{'asns'}}[2] => 'startAsNumber',
@@ -81,6 +81,7 @@ sub addRowToBuffer {
         #of $key
         if($key =~ m/asn/i) {
             push $self->{BUFFER}->{'asns'}, $self->asnsAddRow($value);
+            $self->insertAndFlushBuffer if($self->{BUFFER}->{'asns'} >= $self->{BUFFER}); 
         }
         else {
             print Dumper $key, $value;
@@ -101,10 +102,10 @@ sub asnsAddRow {
     my $rowToPush = shift; 
 
     my @tmpArray = ();
-    foreach(@{$TABLES->{'asns'}}) {
-        my $mapping = ${$XML_TO_COLUMN_MAPPINGS->{'asns'}}{$_};
+    foreach(@{$TABLES->{'Asns'}}) {
+        my $mapping = ${$XML_TO_COLUMN_MAPPINGS->{'Asns'}}{$_};
         push @tmpArray, $rowToPush->{$mapping}; #Proper syntax? though shall seeeez.
-    } 
+    }
 
     return \@tmpArray;
 }
@@ -121,6 +122,20 @@ sub bufferSize {
 sub dumpBuffer {
     my $self = shift;
     print Dumper $self->{BUFFER};
+}
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# insertAndFlushBuffer will take the contents of the
+# buffer and make use of the schema object to dump its 
+# contents to the sql database.
+sub insertAndFlushBuffer {
+    my $self = shift;
+    
+    foreach my $table (keys $self->{BUFFER}) {
+        $self->{SCHEMA_OBJECT}->resultset($table)->populate(
+            $self->{BUFFER}->{$table}
+        );
+    }
 }
 
 return 1;
