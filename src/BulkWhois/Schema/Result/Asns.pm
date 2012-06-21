@@ -29,7 +29,7 @@ __PACKAGE__->add_columns(
     'endAsNumber'       => {data_type => 'int',         is_nullable => 1},
     'name'              => {data_type => 'varchar',     size => 255,    is_nullable => 1},
     'registrationDate'  => {data_type => 'datetime',    is_nullable => 1},
-    'updateTime'        => {data_type => 'datetime',    is_nullable => 1}
+    'updateDate'        => {data_type => 'datetime',    is_nullable => 1}
 );
 
 #Now set the primary key. This function will take in an array of pk's.

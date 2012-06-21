@@ -116,7 +116,7 @@ sub dumpXMLToSQLDB {
     my $counter = 0;
     my $refreshRate = (($totalLines / 400) < 1) ? 1 : int($totalLines / 400);
    
-    #@TODO Get the starting time
+    #@TODO Get the starting time 
 
     #Loop through the contents of the .xml file. Store all of the elements into the 
     #database.
@@ -142,12 +142,15 @@ sub dumpXMLToSQLDB {
             $parsedXML{$xmlReader->name} = XMLin($xmlReader->readOuterXml(), ForceContent => 0, ForceArray => 0,  ContentKey => ELEMENT_TEXT);
             
 #            print Dumper \%parsedXML;
+            
+            #Push the hash into the InsertManager object. 
+            $insertManager->addRowToBuffer(\%parsedXML);
 
             $xmlReader->next();
             $counter++;
             print "Iteration: $counter\n" if($debug);
             do{ 
-                #print Dumper \@insertBuffer;
+                $insertManager->dumpBuffer;
                 last;
             } if($counter == 1000);
         }#END IF

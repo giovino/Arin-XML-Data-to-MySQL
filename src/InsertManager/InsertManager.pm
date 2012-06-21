@@ -12,11 +12,22 @@ use Data::Dumper;
 use BulkWhois::Schema;
 use Scalar::Util 'blessed';
 
-use constant {
-    TABLES => {
-        'asns' => [qw/asnHandle ref startAsNumber endAsNumber name registrationDate updateTime/]
-    }
+my $TABLES = {
+        'asns' => [qw/asnHandle ref startAsNumber endAsNumber name registrationDate updateDate/]
 };
+my $XML_TO_COLUMN_MAPPINGS = {
+        'asns' => {
+            ${$TABLES->{'asns'}}[0] => 'handle',
+            ${$TABLES->{'asns'}}[1] => 'ref',
+            ${$TABLES->{'asns'}}[2] => 'startAsNumber',
+            ${$TABLES->{'asns'}}[3] => 'endAsNumber',
+            ${$TABLES->{'asns'}}[4] => 'name',
+            ${$TABLES->{'asns'}}[5] => 'registrationDate',
+            ${$TABLES->{'asns'}}[6] => 'updateDate'
+        }
+};
+
+#print "Dump of MAP " . Dumper $XML_TO_COLUMN_MAPPINGS;exit;
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Create a new InsertManager. The 
@@ -45,8 +56,8 @@ sub new {
 
     #Initialize the buffer with all of the sub buffers for the tables.
     #The format will be key => array pairs.
-    print Dumper TABLES;
-    while( my ($key, $columns) = each(TABLES))  {
+#    print Dumper $TABLES;
+    while( my ($key, $columns) = each($TABLES))  {
         push @{$self->{BUFFER}->{$key}}, $columns;
     }
 
@@ -68,12 +79,12 @@ sub addRowToBuffer {
     while (my ($key, $value) = each(%{$rowsToPush})) {
         #Determin which table the hash goes to. Ignore the case
         #of $key
-        if($key =~ m/asns/i) {
+        if($key =~ m/asn/i) {
             push $self->{BUFFER}->{'asns'}, $self->asnsAddRow($value);
         }
         else {
-            print Dumper $value;
-            die "Help the birdmen are invading!\n";
+            print Dumper $key, $value;
+            print "Unable to find a function that can handle the hash you passed in.\n";
         }
     }
 }
@@ -87,12 +98,13 @@ sub addRowToBuffer {
 # ordering.
 sub asnsAddRow {
     my $self = shift;
-    my $rowToPush = shift;
+    my $rowToPush = shift; 
 
     my @tmpArray = ();
-    foreach(TABLES->{'asns'}) {
-        push @tmpArray, $rowToPush->{$_}; #Proper syntax? though shall seeeez.
-    }
+    foreach(@{$TABLES->{'asns'}}) {
+        my $mapping = ${$XML_TO_COLUMN_MAPPINGS->{'asns'}}{$_};
+        push @tmpArray, $rowToPush->{$mapping}; #Proper syntax? though shall seeeez.
+    } 
 
     return \@tmpArray;
 }
@@ -103,6 +115,12 @@ sub bufferSize {
     my $self = shift;
     my $bufferSize = shift;
     $self->{BUFFER_SIZE} = ($bufferSize) ? $bufferSize : return $self->{BUFFER_SIZE};
+}
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+sub dumpBuffer {
+    my $self = shift;
+    print Dumper $self->{BUFFER};
 }
 
 return 1;
