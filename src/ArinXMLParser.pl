@@ -101,41 +101,28 @@ sub dumpXMLToSQLDB {
     #Make sure the file path is valid. If it is then initialize an XML::LibXML::Reader 
     # object.
     print "Checking the file's path\n" if($debug);
-    my $xmlReader = undef;
-    if(-e $xmlPath) {
-        $xmlReader = XML::LibXML::Reader->new('location' => $xmlPath, 
-        'load_ext_dtd' => 0); #load the xml file.
-    }
-    else {
-        die "Invalid xml file path.\n";
-    }
-
+    my $xmlReader = (fileExists($xmlPath)) 
+                    ? XML::LibXML::Reader->new(
+                                    'location' => $xmlPath, 
+                                    'load_ext_dtd' => 0
+                                    )
+                    : die $xmlPath . " is an invalid path\n";
 
     #Count the number of lines in the file for a progress report.
     #Set the refresh rate afterwards. This will print an update of 
     #the reading progress for 400 times throughout the dumping.
     print "Counting lines\n";
-    my $totalLines = 0;
-    if($verbose) {
-        $totalLines = 0;
-        
-        open(XML, "<$xmlPath");
-        while(<XML>) {
-            $totalLines++;
-        }
-        close(XML);
-    }
+    my $totalLines = ($verbose) ? countLinesInFile($xmlPath) : 0;
     my $counter = 0;
     my $refreshRate = (($totalLines / 400) < 1) ? 1 : int($totalLines / 400);
    
-    #@TODO Get the starting time.
-    
+    #@TODO Get the starting time
 
     #Loop through the contents of the .xml file. Store all of the elements into the 
     #database.
     print "Begin reading\n" if($debug);
     
-    my $BUFFER_SIZE = 1000;
+    my $BUFFER_SIZE = 1000; #@TODO remove this variable once done debugging this script.
     my @insertBuffer = ();
     while($xmlReader->read()) {
         #Go through all of the child elements of the root node. Use XML::Simple
@@ -171,7 +158,36 @@ sub dumpXMLToSQLDB {
 }
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Checks for the existance of a file based on the path given. If the 
+# file exists then 1 is returned. Otherwise return 0.
+#   @param the path of hte file as a string.
+sub fileExists {
+    my $path = shift;
+    
+    return (-e $path) ? 1 : 0;
+}
 
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Count the total number of lines in the file.
+#
+#   @param the path of the file to count.
+sub countLinesInFile {
+    my $path = shift;
+
+    my $totalLines = 0;
+        
+    if(fileExists($path)) {    
+        open(XML, "<$path");
+        while(<XML>) {
+            $totalLines++;
+        }
+        close(XML);
+    }
+
+    return $totalLines;
+}
 
 #### SCRAP #########
 #

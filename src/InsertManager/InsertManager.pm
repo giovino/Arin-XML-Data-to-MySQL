@@ -33,9 +33,7 @@ sub new {
     #Get the argumensts
     my $class = shift;
     my %args = @_;
-    print Dumper \%args;
     my $bufferSize  = ($args{'bufferSize'}) ? $args{'bufferSize'} : 10;
-    
     #Make sure a schema object is passed in. Otherwise die.
     my $schemaObj   = (blessed($args{'schema'}) && (blessed($args{'schema'}) eq "BulkWhois::Schema")) 
                     ? $args{'schema'} 
@@ -54,8 +52,6 @@ sub new {
 
     #Perform the blessing
     bless $self, $class;
-   
-    print Dumper $self; exit;
 
     return $self;
 }
