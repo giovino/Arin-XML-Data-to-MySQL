@@ -15,7 +15,7 @@ use Data::Dumper;
 
 
 #Set the table the module will represent.
-__PACKAGE__->table('asns');
+__PACKAGE__->table('Asns');
 
 #This table contains columns that store DATETIME vars.
 # This component will convert this into a perl object.

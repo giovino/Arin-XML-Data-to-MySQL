@@ -17,13 +17,13 @@ my $TABLES = {
 };
 my $XML_TO_COLUMN_MAPPINGS = {
         'Asns' => {
-            ${$TABLES->{'asns'}}[0] => 'handle',
-            ${$TABLES->{'asns'}}[1] => 'ref',
-            ${$TABLES->{'asns'}}[2] => 'startAsNumber',
-            ${$TABLES->{'asns'}}[3] => 'endAsNumber',
-            ${$TABLES->{'asns'}}[4] => 'name',
-            ${$TABLES->{'asns'}}[5] => 'registrationDate',
-            ${$TABLES->{'asns'}}[6] => 'updateDate'
+            $TABLES->{'Asns'}->[0] => 'handle',
+            $TABLES->{'Asns'}->[1] => 'ref',
+            $TABLES->{'Asns'}->[2] => 'startAsNumber',
+            $TABLES->{'Asns'}->[3] => 'endAsNumber',
+            $TABLES->{'Asns'}->[4] => 'name',
+            $TABLES->{'Asns'}->[5] => 'registrationDate',
+            $TABLES->{'Asns'}->[6] => 'updateDate'
         }
 };
 
@@ -77,11 +77,14 @@ sub addRowToBuffer {
 
     #Determine the type of table it will need to be parsed to.
     while (my ($key, $value) = each(%{$rowsToPush})) {
-        #Determin which table the hash goes to. Ignore the case
+        #Determine wich table the hash goes to. Ignore the case
         #of $key
         if($key =~ m/asn/i) {
-            push $self->{BUFFER}->{'asns'}, $self->asnsAddRow($value);
-            $self->insertAndFlushBuffer if($self->{BUFFER}->{'asns'} >= $self->{BUFFER}); 
+            #my $bufferSize = @{$self->{BUFFER}->{'Asns'}};
+            #print "Buffer Size: $bufferSize / ". $self->{BUFFER_SIZE} ."\n"; 
+
+            push $self->{BUFFER}->{'Asns'}, $self->asnsAddRow($value);
+            $self->insertAndFlushBuffer('Asns') if(@{$self->{BUFFER}->{'Asns'}} == $self->{BUFFER_SIZE}); 
         }
         else {
             print Dumper $key, $value;
@@ -127,14 +130,37 @@ sub dumpBuffer {
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # insertAndFlushBuffer will take the contents of the
 # buffer and make use of the schema object to dump its 
-# contents to the sql database.
+# contents to the sql database. Once it has completed 
+# dumping the contents the table in the buffer is emptied
+# such that there is only the column row in the buffer table.
+#
+#   @param the table in the buffer to flush to the database 
+#       passing in a null value assumes the flushing of the
+#       entire buffer.
 sub insertAndFlushBuffer {
     my $self = shift;
-    
-    foreach my $table (keys $self->{BUFFER}) {
-        $self->{SCHEMA_OBJECT}->resultset($table)->populate(
-            $self->{BUFFER}->{$table}
-        );
+    my $bufferTableToFlush = shift;
+    $bufferTableToFlush = ($bufferTableToFlush) ? $bufferTableToFlush : 0;
+
+#    print "Flushing Buffer\n";
+
+    #If a table is defined then flush only that table.
+    #Otherwise flush every table in the buffer.
+    if($bufferTableToFlush) { 
+        $self->{SCHEMA_OBJECT}->resultset($bufferTableToFlush)->populate(
+                $self->{BUFFER}->{$bufferTableToFlush}
+            );
+        $self->{BUFFER}->{$bufferTableToFlush} = 
+            [$self->{BUFFER}->{$bufferTableToFlush}->[0]];
+    }
+    else {
+        foreach my $table (keys $self->{BUFFER}) {
+            $self->{SCHEMA_OBJECT}->resultset($table)->populate(
+                $self->{BUFFER}->{$table}
+            );
+            $self->{BUFFER}->{$table} = 
+                [$self->{BUFFER}->{$table}->[0]];
+        }
     }
 }
 
