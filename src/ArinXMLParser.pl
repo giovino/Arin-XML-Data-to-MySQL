@@ -25,7 +25,7 @@ my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db.xml";
 print getcwd."\n";
 dumpXMLToSQLDB($xmlPath, dbms => 'mysql', database => 'BulkWhois', 
                 hostAddress => 'localhost', username => 'root', 
-                password => '12345', verbose => 0, debug => 1);
+                password => '12345', verbose => 1, debug => 1);
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Parses the specified .xml Arin dump file and places it in the 
@@ -148,11 +148,11 @@ sub dumpXMLToSQLDB {
 
             $xmlReader->next();
             $counter++;
-            print "Iteration: $counter\n" if($debug);
             do{ 
-                $insertManager->dumpBuffer;
-                last;
-            } if($counter == 1000);
+                #$insertManager->dumpBuffer;
+                #last;
+                print "Iteration: $counter\n" if($debug);
+            } if(($counter % 1000) == 0);
         }#END IF
     }#END WHILE
     

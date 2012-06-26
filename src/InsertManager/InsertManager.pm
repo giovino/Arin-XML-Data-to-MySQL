@@ -51,7 +51,7 @@ sub new {
                     : die "I need a schema object, Create one and pass it in.\n";
     my $self->{BUFFER_SIZE} = $bufferSize; 
     $self->{SCHEMA_OBJECT} = $schemaObj; 
-    
+    $self->{ITEMS_PROCESSED} = 0;
     $self->{BUFFER} = {};
 
     #Initialize the buffer with all of the sub buffers for the tables.
@@ -87,9 +87,14 @@ sub addRowToBuffer {
             $self->insertAndFlushBuffer('Asns') if(@{$self->{BUFFER}->{'Asns'}} == $self->{BUFFER_SIZE}); 
         }
         else {
+            $self->insertAndFlushBuffer;
             print Dumper $key, $value;
             print "Unable to find a function that can handle the hash you passed in.\n";
+            print "Items Processed: ". $self->{ITEMS_PROCESSED} ,"\n";
+            exit;
         }
+
+        $self->{ITEMS_PROCESSED}++;
     }
 }
 
@@ -107,10 +112,21 @@ sub asnsAddRow {
     my @tmpArray = ();
     foreach(@{$TABLES->{'Asns'}}) {
         my $mapping = ${$XML_TO_COLUMN_MAPPINGS->{'Asns'}}{$_};
-        push @tmpArray, $rowToPush->{$mapping}; #Proper syntax? though shall seeeez.
+        push @tmpArray, $rowToPush->{$mapping};
     }
 
     return \@tmpArray;
+}
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Formats the hash data so that it can be inserted 
+# into a table that binds Pocs to Asns
+#
+#   @param a asnHandle the pocLink belongs to.
+#   @param the pocLink
+sub asns_Pocs {
+   my $asnHandle = shift;
+   my $pocLink = shift;
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
