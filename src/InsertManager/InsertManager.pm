@@ -12,10 +12,29 @@ use Data::Dumper;
 use BulkWhois::Schema;
 use Scalar::Util 'blessed';
 
+#These are the tables that InsertManager will expect to find in the DBIx::Class object.
+# If you add a new table make sure to update this hash. If you update a column name or 
+# add a new column update this hash. AKA reflect any changes made in this hash.
+# NOTE If the xml data is not in a string format then you may need to add an exception
+# in $COLUMNS_THAT_NEED_EXTRA_PARSING hash for extra parsing. (you will need to create a 
+# function also)
 my $TABLES = {
-        'Asns' => [qw/asnHandle ref startAsNumber endAsNumber name registrationDate updateDate/]
+    'Asns' => [qw/asnHandle ref startAsNumber endAsNumber name registrationDate updateDate comment/]
 };
-my $XML_TO_COLUMN_MAPPINGS = {
+
+#Some elements in the xml file can be parsed into a single column. For example the 
+#comments element in the BulkWhois XML dump doesn't need to be seperated into lines.
+#This hash contains keys of all the main BulkWhois elements sub elements that will need
+#extra processsing.
+my $ELEMENTS_THAT_NEED_EXTRA_PARSING = {
+    'asn' => {
+        comment => 1
+    }
+};
+
+#Allows InsertManager to recognize xml elements and attributes from an XML::Simple hash
+# with their corresponding column entries in the database. 
+my $COLUMN_TO_XML_MAPPINGS = {
         'Asns' => {
             $TABLES->{'Asns'}->[0] => 'handle',
             $TABLES->{'Asns'}->[1] => 'ref',
@@ -23,7 +42,8 @@ my $XML_TO_COLUMN_MAPPINGS = {
             $TABLES->{'Asns'}->[3] => 'endAsNumber',
             $TABLES->{'Asns'}->[4] => 'name',
             $TABLES->{'Asns'}->[5] => 'registrationDate',
-            $TABLES->{'Asns'}->[6] => 'updateDate'
+            $TABLES->{'Asns'}->[6] => 'updateDate',
+            $TABLES->{'Asns'}->[7] => 'comment'
         }
 };
 
@@ -53,13 +73,15 @@ sub new {
     $self->{SCHEMA_OBJECT} = $schemaObj; 
     $self->{ITEMS_PROCESSED} = 0;
     $self->{BUFFER} = {};
+    $self->{DEFAULT_ELEMENT_TEXT_KEY} = {};
 
     #Initialize the buffer with all of the sub buffers for the tables.
     #The format will be key => array pairs.
 #    print Dumper $TABLES;
     while( my ($key, $columns) = each($TABLES))  {
-        push @{$self->{BUFFER}->{$key}}, $columns;
+        $self->{BUFFER}->{$key} = [];
     }
+#    print Dumper $self->{BUFFER};
 
     #Perform the blessing
     bless $self, $class;
@@ -83,7 +105,7 @@ sub addRowToBuffer {
             #my $bufferSize = @{$self->{BUFFER}->{'Asns'}};
             #print "Buffer Size: $bufferSize / ". $self->{BUFFER_SIZE} ."\n"; 
 
-            push $self->{BUFFER}->{'Asns'}, $self->asnsAddRow($value);
+            push @{$self->{BUFFER}->{'Asns'}}, $self->asnsAddRow($value);
             $self->insertAndFlushBuffer('Asns') if(@{$self->{BUFFER}->{'Asns'}} == $self->{BUFFER_SIZE}); 
         }
         else {
@@ -107,15 +129,72 @@ sub addRowToBuffer {
 # ordering.
 sub asnsAddRow {
     my $self = shift;
-    my $rowToPush = shift; 
+    my $rowToPush = shift;
 
-    my @tmpArray = ();
+    my %tmpHash = ();
     foreach(@{$TABLES->{'Asns'}}) {
-        my $mapping = ${$XML_TO_COLUMN_MAPPINGS->{'Asns'}}{$_};
-        push @tmpArray, $rowToPush->{$mapping};
+        my $corresXMLElement = ${$COLUMN_TO_XML_MAPPINGS->{'Asns'}}{$_}; #Get the column that corresponds to the xml element.
+
+        
+        if(!$ELEMENTS_THAT_NEED_EXTRA_PARSING->{'asn'}->{$corresXMLElement}) {
+            $tmpHash{$_} = $rowToPush->{$corresXMLElement};
+        }
+        else {
+            $tmpHash{$_} = parsingFunctionChooser($rowToPush, $corresXMLElement, 'asn');
+        }
     }
 
-    return \@tmpArray;
+    print Dumper \%tmpHash; exit;
+    
+    #my @tmpArray = ();
+    #foreach(@{$TABLES->{'Asns'}}) {
+    #    my $mapping =  "";
+    #    
+    #    #Depending on the data in the rowToPush has either extract
+    #    # the string directly from the subhash or call a 
+    #    # function to convert it into a string.
+    #    if(!$COLUMNS_THAT_NEED_EXTRA_PARSING->{'Asns'}->{$_}) {
+    #        $mapping = ${$COLUMN_TO_XML_MAPPINGS->{'Asns'}}{$_};
+    #        push @tmpArray, $rowToPush->{$mapping
+    #    }
+    #    else {
+    #        print Dumper \@tmpArray;
+    #        print Dumper $rowToPush;
+    #        print Dumper $_;
+    #        $mapping =
+    #            commentToString(${$COLUMN_TO_XML_MAPPINGS->{'Asns'}}{$_}) if($_ eq 'comment');
+    #    }
+    #    
+    #    push @tmpArray, $rowToPush->{$mapping};
+    #}
+
+    #return \@tmpArray;
+}
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Converts a comment into a string so that it may be added 
+# to the database.
+#
+#   @param The comment hash to parse.
+#
+#   @return The comment as a single string.
+sub commentToString {
+    my $commentToParse = shift;
+
+    #First see if dealing with a hash or an array of hashes.
+    if(ref($commentToParse->{'line'}) eq 'ARRAY') {
+        print "This is an arrary\n";
+    }
+    elsif(ref($commentToParse->{'line'}) eq 'HASH') {
+        print "This is a hash\n";
+    }
+    else {
+        print "This is neither a hash nor array\n";
+    }
+
+    print Dumper $commentToParse;
+
+    exit;
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -130,11 +209,51 @@ sub asns_Pocs {
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# parsingFunctionChooser pretty much serves as a front 
+# controller. If there is an xml element that needs extra 
+# parsing define a new function and add the exception here.
+# 
+#   @param the rowToPush (expects the same hash as the function
+#       that called parsingFunctionChooser)
+#   @param the parent element of element to parse.
+#   @param the element to parse. This element will trigger 
+#       the correct function call.
+#
+#   @return the parsed value as a string.
+sub parsingFunctionChooser {
+    my $rowToPush = shift;
+    my $elementToParse = shift;
+    my $parentElement = shift;
+
+    my $result = undef;
+    if($parentElement eq 'asn') {
+       if($elementToParse eq 'comment') {
+            $result = commentToString($rowToPush->{$elementToParse}, $elementToParse);
+       }
+    }
+    else {
+        print "parsingFunctionChooser: Undable to find a function to parse $elementToParse that belongs to $parentElement\n";
+    }
+
+    return $result;
+}
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Set or get the size of the buffer for InsertManager.
 sub bufferSize {
     my $self = shift;
     my $bufferSize = shift;
     $self->{BUFFER_SIZE} = ($bufferSize) ? $bufferSize : return $self->{BUFFER_SIZE};
+}
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Set or get the default key to look for when parsing element text
+# from an XML::Simple hash. 
+sub defaultElementTextKey {
+    my $self = shift;
+    my $key = shift;
+    $self->{DEFAULT_ELEMENT_TEXT_KEY} = ($key) ? $key : return $self->{BUFFER_SIZE};
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -159,6 +278,8 @@ sub insertAndFlushBuffer {
     $bufferTableToFlush = ($bufferTableToFlush) ? $bufferTableToFlush : 0;
 
 #    print "Flushing Buffer\n";
+
+    #print Dumper $self->{BUFFER};
 
     #If a table is defined then flush only that table.
     #Otherwise flush every table in the buffer.

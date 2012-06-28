@@ -29,14 +29,15 @@ __PACKAGE__->add_columns(
     'endAsNumber'       => {data_type => 'int',         is_nullable => 1},
     'name'              => {data_type => 'varchar',     size => 255,    is_nullable => 1},
     'registrationDate'  => {data_type => 'datetime',    is_nullable => 1},
-    'updateDate'        => {data_type => 'datetime',    is_nullable => 1}
+    'updateDate'        => {data_type => 'datetime',    is_nullable => 1},
+    'comment'           => {data_type => 'varchar',     size => 4097,     is_nullable => 1} 
 );
 
 #Now set the primary key. This function will take in an array of pk's.
-#__PACKAGE__->set_primary_key('asnHandle');
+__PACKAGE__->set_primary_key('asnHandle');
 
 #Now make sure non of the asn handles never match. Actually cannot use this feature 
 # if the user whishes to keep an update history.
-#__PACKAGE__->add_unique_constraint('asnHandle', ['asnHandle']);
+__PACKAGE__->add_unique_constraint('asnHandle', ['asnHandle']);
 
 return 1;

@@ -15,13 +15,14 @@ use InsertManager::InsertManager;
 use Cwd;
 use Scalar::Util 'blessed';
 
+#Right now the default key that XML::Simple usees for element text is #TEXT. 
 use constant {
-    ELEMENT_TEXT => '#TEXT',
-    ELEMENT_ATTRIBUTE => '#ATTR'
+    ELEMENT_TEXT => '#TEXT'
+#    ELEMENT_ATTRIBUTE => '#ATTR'
 };
 
-#my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_test.xml";
-my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db.xml";
+my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_test.xml";
+#my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db.xml";
 print getcwd."\n";
 dumpXMLToSQLDB($xmlPath, dbms => 'mysql', database => 'BulkWhois', 
                 hostAddress => 'localhost', username => 'root', 
@@ -111,19 +112,20 @@ sub dumpXMLToSQLDB {
     #Count the number of lines in the file for a progress report.
     #Set the refresh rate afterwards. This will print an update of 
     #the reading progress for 400 times throughout the dumping.
-    print "Counting lines\n";
-    my $totalLines = ($verbose) ? countLinesInFile($xmlPath) : 0;
+    print "Counting lines\n" if($debug);
+    my ($totalLines, $deltaTime) = (10000, 0);#($verbose) ? countLinesInFile($xmlPath) : 0;
+#    print Dumper $totalLines, $deltaTime;
     my $counter = 0;
     my $refreshRate = (($totalLines / 400) < 1) ? 1 : int($totalLines / 400);
-   
-    #@TODO Get the starting time 
+    print "Time to count lines: $deltaTime seconds\n" if($debug);
+    print "Lines counted: $totalLines\n" if($debug);
+    print "Refresh every $refreshRate lines parsed\n" if($debug); 
 
     #Loop through the contents of the .xml file. Store all of the elements into the 
     #database.
-    print "Begin reading\n" if($debug);
-    
+    print "Begin reading\n" if($debug); 
     my $BUFFER_SIZE = 2000; #@TODO remove this variable once done debugging this script.
-    my @insertBuffer = ();
+    my $startTime = time; #Start the stopwatch
     while($xmlReader->read()) {
         #Go through all of the child elements of the root node. Use XML::Simple
         # to convert them into a hash. Then go through the hash and push it into 
@@ -155,6 +157,9 @@ sub dumpXMLToSQLDB {
             } if(($counter % 1000) == 0);
         }#END IF
     }#END WHILE
+    my $endTime = time;
+    my $deltaTime = $endTime - $startTime;
+    print "$deltaTime seconds was required to parse the XML file\n" if($verbose || $debug);
     
     #@TODO Get the stopping time.
     # Print the total time to the screen. 
@@ -178,9 +183,11 @@ sub fileExists {
 #   @param the path of the file to count.
 sub countLinesInFile {
     my $path = shift;
+    
 
     my $totalLines = 0;
-        
+    
+    my $startTime = time;
     if(fileExists($path)) {    
         open(XML, "<$path");
         while(<XML>) {
@@ -188,8 +195,10 @@ sub countLinesInFile {
         }
         close(XML);
     }
+    my $endTime = time;
+    my $deltaTime = $endTime - $startTime;
 
-    return $totalLines;
+    return ($totalLines, $deltaTime);
 }
 
 #### SCRAP #########
