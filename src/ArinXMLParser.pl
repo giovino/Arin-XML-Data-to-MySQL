@@ -92,7 +92,7 @@ sub dumpXMLToSQLDB {
     } 
     my $bulkWhoisSchema = BulkWhois::Schema->connect($dsn, $username, $password);
     #@TODO I should probably have a more intelligent deploying scheme.
-    $bulkWhoisSchema->deploy(); #Creates a database from the schema
+    $bulkWhoisSchema->deploy({add_drop_table => 1}); #Creates a database from the schema erase previouse db
     my $deployStatements = $bulkWhoisSchema->deployment_statements;
     print "$deployStatements\n";
 

@@ -128,6 +128,11 @@ sub addRowToBuffer {
 # columns in the asns table. Refer to the constants 
 # hash at the top of the file if you wish to change the
 # ordering.
+#
+#   @param a row to push into the database. The expected variable type
+#       is a hash that has been produced by XML::Simple::XMLin(...)
+#
+#   @return a hash that can be used by the populate method in DBIx::Class::Schema object.
 sub asnsAddRow {
     my $self = shift;
     my $rowToPush = shift;
@@ -144,7 +149,6 @@ sub asnsAddRow {
             $tmpHash{$_} = $self->parsingFunctionChooser($rowToPush, $corresXMLElement, 'asn');
         }
     }
-    #print Dumper \%tmpHash; exit; 
     
     return \%tmpHash;
 }
