@@ -2,7 +2,7 @@
 # This class represents the asns table in the the database. 
 # @TODO test this module and make sure it works.
 #
-package BulkWhois::Schema::Orgs;
+package BulkWhois::Schema::Result::Orgs;
 use base qw/DBIx::Class::Core/; #Inherit from the parent class.
 
 use strict;
