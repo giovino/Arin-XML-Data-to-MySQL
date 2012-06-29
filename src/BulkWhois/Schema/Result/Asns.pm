@@ -3,8 +3,7 @@
 # @TODO test this module and make sure it works.
 #
 package BulkWhois::Schema::Result::Asns; #@NOTE All modules need to be in the following path Result/Asns.
-use base qw/DBIx::Class::Core/; #Inherit from the parent class? or does this simply 
-                                # make its functions usable.
+use base qw/DBIx::Class::Core/; #Inherit from the Core module from DBIx               
 
 use strict;
 use warnings;
