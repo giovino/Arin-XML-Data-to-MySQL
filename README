@@ -1,9 +1,10 @@
 REQUIRMENTS: 
 	-Perl needs to be installed.
 	-A database needs to be installed. (Right now we have only tested with MySQL)
-	-The DBIx::Class module needs to be installed.
-        -The DBIx::Class::Schema has a 'deploy' feature.
-        -The XML::LibXML::Reader will need to be installed. 
+	-DBIx::Class module needs to be installed.
+        -DBIx::Class::Schema has a 'deploy' feature.
+        -XML::LibXML::Reader will need to be installed. (This isn't needed anymore, but I'm going to keep all of the installation requirements in the readme for future reference).
+        -XML::Simple needs to be installed.
 
 INSTALLATION:
 -Ubuntu 12.04 LTS

@@ -21,8 +21,8 @@ use constant {
 #    ELEMENT_ATTRIBUTE => '#ATTR'
 };
 
-my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_test.xml";
-#my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db.xml";
+#my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_test.xml";
+my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db.xml";
 print getcwd."\n";
 dumpXMLToSQLDB($xmlPath, dbms => 'mysql', database => 'BulkWhois', 
                 hostAddress => 'localhost', username => 'root', 
@@ -97,6 +97,7 @@ sub dumpXMLToSQLDB {
     print "$deployStatements\n";
 
     my $insertManager = InsertManager::InsertManager->new(bufferSize => 1000, schema => $bulkWhoisSchema);
+    $insertManager->defaultElementTextKey(ELEMENT_TEXT); 
     #~~~~~~~~~~~~~~~~~~~~~~~~
 
     #Make sure the file path is valid. If it is then initialize an XML::LibXML::Reader 

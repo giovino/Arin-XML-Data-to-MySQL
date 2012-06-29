@@ -47,6 +47,10 @@ my $COLUMN_TO_XML_MAPPINGS = {
         }
 };
 
+#The default key to look for when finding the value of an element in an
+#XML::Simple hash.
+my $DEFAULT_ELEMENT_TEXT_KEY = undef;
+
 #print "Dump of MAP " . Dumper $XML_TO_COLUMN_MAPPINGS;exit;
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -102,9 +106,6 @@ sub addRowToBuffer {
         #Determine wich table the hash goes to. Ignore the case
         #of $key
         if($key =~ m/asn/i) {
-            #my $bufferSize = @{$self->{BUFFER}->{'Asns'}};
-            #print "Buffer Size: $bufferSize / ". $self->{BUFFER_SIZE} ."\n"; 
-
             push @{$self->{BUFFER}->{'Asns'}}, $self->asnsAddRow($value);
             $self->insertAndFlushBuffer('Asns') if(@{$self->{BUFFER}->{'Asns'}} == $self->{BUFFER_SIZE}); 
         }
@@ -140,35 +141,12 @@ sub asnsAddRow {
             $tmpHash{$_} = $rowToPush->{$corresXMLElement};
         }
         else {
-            $tmpHash{$_} = parsingFunctionChooser($rowToPush, $corresXMLElement, 'asn');
+            $tmpHash{$_} = $self->parsingFunctionChooser($rowToPush, $corresXMLElement, 'asn');
         }
     }
-
-    print Dumper \%tmpHash; exit;
+    #print Dumper \%tmpHash; exit; 
     
-    #my @tmpArray = ();
-    #foreach(@{$TABLES->{'Asns'}}) {
-    #    my $mapping =  "";
-    #    
-    #    #Depending on the data in the rowToPush has either extract
-    #    # the string directly from the subhash or call a 
-    #    # function to convert it into a string.
-    #    if(!$COLUMNS_THAT_NEED_EXTRA_PARSING->{'Asns'}->{$_}) {
-    #        $mapping = ${$COLUMN_TO_XML_MAPPINGS->{'Asns'}}{$_};
-    #        push @tmpArray, $rowToPush->{$mapping
-    #    }
-    #    else {
-    #        print Dumper \@tmpArray;
-    #        print Dumper $rowToPush;
-    #        print Dumper $_;
-    #        $mapping =
-    #            commentToString(${$COLUMN_TO_XML_MAPPINGS->{'Asns'}}{$_}) if($_ eq 'comment');
-    #    }
-    #    
-    #    push @tmpArray, $rowToPush->{$mapping};
-    #}
-
-    #return \@tmpArray;
+    return \%tmpHash;
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -179,22 +157,77 @@ sub asnsAddRow {
 #
 #   @return The comment as a single string.
 sub commentToString {
+    my $self = shift;
     my $commentToParse = shift;
 
+    my $comment = undef;
+
     #First see if dealing with a hash or an array of hashes.
+    #Then parse accordingly.
     if(ref($commentToParse->{'line'}) eq 'ARRAY') {
-        print "This is an arrary\n";
+        my $count = @{$commentToParse->{'line'}}; 
+        my @comments = ('')x$count;
+
+        #Map the comment contents of the array to their proper location in the comment only array.
+        map { 
+                $comments[$_->{'number'}] = ($_->{$self->defaultElementTextKey}) 
+                                            ? $_->{$self->defaultElementTextKey}
+                                            : ''
+            }
+            @{$commentToParse->{'line'}};
+        $comment = join " ", @comments;
     }
     elsif(ref($commentToParse->{'line'}) eq 'HASH') {
-        print "This is a hash\n";
+        $comment = $commentToParse->{'line'}->{$self->defaultElementTextKey};
     }
+    elsif(!defined($commentToParse->{line})) {}
     else {
-        print "This is neither a hash nor array\n";
+        print "Unexpected value when received a comment to parse.\n";
+        print Dumper $commentToParse; 
     }
 
-    print Dumper $commentToParse;
+    return $comment;
+}
 
-    exit;
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Converts an address to a string so that it may be added 
+# to the database table.
+#
+#   @param The address hash to parse.
+#
+#   @return The address as a single string.
+sub commentToString {
+    my $self = shift;
+    my $commentToParse = shift;
+
+    my $comment = undef;
+
+    #First see if dealing with a hash or an array of hashes.
+    #Then parse accordingly.
+    if(ref($commentToParse->{'line'}) eq 'ARRAY') {
+        my $count = @{$commentToParse->{'line'}}; 
+        my @comments = ('')x$count;
+
+        #Map the comment contents of the array to their proper location in the comment only array.
+        map { 
+                $comments[$_->{'number'}] = ($_->{$self->defaultElementTextKey}) 
+                                            ? $_->{$self->defaultElementTextKey}
+                                            : ''
+            }
+            @{$commentToParse->{'line'}};
+        $comment = join " ", @comments;
+    }
+    elsif(ref($commentToParse->{'line'}) eq 'HASH') {
+        $comment = $commentToParse->{'line'}->{$self->defaultElementTextKey};
+    }
+    elsif(!defined($commentToParse->{line})) {}
+    else {
+        print "Unexpected value when received an address to parse.\n";
+        print Dumper $commentToParse; 
+    }
+
+    return $comment;
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -204,8 +237,9 @@ sub commentToString {
 #   @param a asnHandle the pocLink belongs to.
 #   @param the pocLink
 sub asns_Pocs {
-   my $asnHandle = shift;
-   my $pocLink = shift;
+    my $self = shift;
+    my $asnHandle = shift;
+    my $pocLink = shift;
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -221,6 +255,7 @@ sub asns_Pocs {
 #
 #   @return the parsed value as a string.
 sub parsingFunctionChooser {
+    my $self = shift;
     my $rowToPush = shift;
     my $elementToParse = shift;
     my $parentElement = shift;
@@ -228,7 +263,7 @@ sub parsingFunctionChooser {
     my $result = undef;
     if($parentElement eq 'asn') {
        if($elementToParse eq 'comment') {
-            $result = commentToString($rowToPush->{$elementToParse}, $elementToParse);
+            $result = $self->commentToString($rowToPush->{$elementToParse}, $elementToParse);
        }
     }
     else {
@@ -253,7 +288,7 @@ sub bufferSize {
 sub defaultElementTextKey {
     my $self = shift;
     my $key = shift;
-    $self->{DEFAULT_ELEMENT_TEXT_KEY} = ($key) ? $key : return $self->{BUFFER_SIZE};
+    $self->{DEFAULT_ELEMENT_TEXT_KEY} = ($key) ? $key : return $self->{DEFAULT_ELEMENT_TEXT_KEY};
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -287,16 +322,14 @@ sub insertAndFlushBuffer {
         $self->{SCHEMA_OBJECT}->resultset($bufferTableToFlush)->populate(
                 $self->{BUFFER}->{$bufferTableToFlush}
             );
-        $self->{BUFFER}->{$bufferTableToFlush} = 
-            [$self->{BUFFER}->{$bufferTableToFlush}->[0]];
+        $self->{BUFFER}->{$bufferTableToFlush} = [];#[$self->{BUFFER}->{$bufferTableToFlush}->[0]];
     }
     else {
         foreach my $table (keys $self->{BUFFER}) {
             $self->{SCHEMA_OBJECT}->resultset($table)->populate(
                 $self->{BUFFER}->{$table}
             );
-            $self->{BUFFER}->{$table} = 
-                [$self->{BUFFER}->{$table}->[0]];
+            $self->{BUFFER}->{$table} = [];#[$self->{BUFFER}->{$table}->[0]];
         }
     }
 }
