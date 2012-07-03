@@ -159,7 +159,7 @@ sub dumpXMLToSQLDB {
         }#END IF
     }#END WHILE
     my $endTime = time;
-    my $deltaTime = $endTime - $startTime;
+    $deltaTime = $endTime - $startTime;
     print "$deltaTime seconds was required to parse the XML file\n" if($verbose || $debug);
     
     #@TODO Get the stopping time.

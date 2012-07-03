@@ -19,7 +19,8 @@ use Scalar::Util 'blessed';
 # in $COLUMNS_THAT_NEED_EXTRA_PARSING hash for extra parsing. (you will need to create a 
 # function also)
 my $TABLES = {
-    'Asns' => [qw/asnHandle ref startAsNumber endAsNumber name registrationDate updateDate comment/]
+    'Asns' => [qw/asnHandle orgHandle ref startAsNumber endAsNumber name registrationDate updateDate comment/],
+    'Asns_Pocs' => [qw/asnHandle pocHandle function description/] #The handles need to be in the same order as the table naming scheme. In this case the asnHandle is first and the pocHandle is second. 
 };
 
 #Some elements in the xml file can be parsed into a single column. For example the 
@@ -28,23 +29,37 @@ my $TABLES = {
 #extra processsing.
 my $ELEMENTS_THAT_NEED_EXTRA_PARSING = {
     'asn' => {
-        comment => 1
+        comment => 1,
+        pocLinks => 1
     }
 };
 
 #Allows InsertManager to recognize xml elements and attributes from an XML::Simple hash
 # with their corresponding column entries in the database. 
 my $COLUMN_TO_XML_MAPPINGS = {
-        'Asns' => {
-            $TABLES->{'Asns'}->[0] => 'handle',
-            $TABLES->{'Asns'}->[1] => 'ref',
-            $TABLES->{'Asns'}->[2] => 'startAsNumber',
-            $TABLES->{'Asns'}->[3] => 'endAsNumber',
-            $TABLES->{'Asns'}->[4] => 'name',
-            $TABLES->{'Asns'}->[5] => 'registrationDate',
-            $TABLES->{'Asns'}->[6] => 'updateDate',
-            $TABLES->{'Asns'}->[7] => 'comment'
-        }
+    'Asns' => {
+        $TABLES->{'Asns'}->[0] => 'handle',
+        $TABLES->{'Asns'}->[1] => 'orgHandle',
+        $TABLES->{'Asns'}->[2] => 'ref',
+        $TABLES->{'Asns'}->[3] => 'startAsNumber',
+        $TABLES->{'Asns'}->[4] => 'endAsNumber',
+        $TABLES->{'Asns'}->[5] => 'name',
+        $TABLES->{'Asns'}->[6] => 'registrationDate',
+        $TABLES->{'Asns'}->[7] => 'updateDate',
+        $TABLES->{'Asns'}->[8] => 'comment'
+    },
+    'Asns_Pocs' => {
+        $TABLES->{'Asns_Pocs'}->[0] => 'asnHandle',
+        $TABLES->{'Asns_Pocs'}->[1] => 'handle',
+        $TABLES->{'Asns_Pocs'}->[2] => 'function',
+        $TABLES->{'Asns_Pocs'}->[3] => 'description'
+    }
+};
+
+#The inverse of COLUMN_TO_XML_MAPPINGS
+my $XML_TO_COLUMN_MAPPINGS = {
+    'Asns' => reverse $COLUMN_TO_XML_MAPPINGS->{'Asns_Pocs'},
+    'Asns_Pocs' => reverse $COLUMN_TO_XML_MAPPINGS->{'Asns'}
 };
 
 #The default key to look for when finding the value of an element in an
@@ -106,8 +121,11 @@ sub addRowToBuffer {
         #Determine wich table the hash goes to. Ignore the case
         #of $key
         if($key =~ m/asn/i) {
-            push @{$self->{BUFFER}->{'Asns'}}, $self->asnsAddRow($value);
-            $self->insertAndFlushBuffer('Asns') if(@{$self->{BUFFER}->{'Asns'}} == $self->{BUFFER_SIZE}); 
+            #push @{$self->{BUFFER}->{'Asns'}}, $self->asnsAddRow($value);
+            #if(@{$self->{BUFFER}->{'Asns'}} == $self->{BUFFER_SIZE}) {
+            #    $self->insertAndFlushBuffer('Asns');
+            #    $self->insertAndFlushBuffer('Asns_Pocs');
+            #}
         }
         else {
             $self->insertAndFlushBuffer;
@@ -138,6 +156,7 @@ sub asnsAddRow {
     my $rowToPush = shift;
 
     my %tmpHash = ();
+    #parse all of the simple elements in the hash.
     foreach(@{$TABLES->{'Asns'}}) {
         my $corresXMLElement = ${$COLUMN_TO_XML_MAPPINGS->{'Asns'}}{$_}; #Get the column that corresponds to the xml element.
 
@@ -145,11 +164,30 @@ sub asnsAddRow {
         if(!$ELEMENTS_THAT_NEED_EXTRA_PARSING->{'asn'}->{$corresXMLElement}) {
             $tmpHash{$_} = $rowToPush->{$corresXMLElement};
         }
+    }
+
+    #Go through all of the elements that need extra parsing
+    foreach my $key (keys $ELEMENTS_THAT_NEED_EXTRA_PARSING->{'asn'}) {
+        my $column = $XML_TO_COLUMN_MAPPINGS->{'Asns'}->{$key};
+        
+
+#        print "Key: ". Dumper $key;
+#        print "Column: ". Dumper $column;
+#        print "Row: " . Dumper $rowToPush;
+
+
+        #If there is a mapping then call the parsingFunctionChooser and 
+        #push the result into the tmpHash.
+        if(defined($column)) {    
+            $tmpHash{$column} = $self->parsingFunctionChooser($rowToPush, 'asn', $column);
+        }
+        #If column is null then call the parsingFunctionChooser and let it call 
+        #a function to handle the data properly.
         else {
-            $tmpHash{$_} = $self->parsingFunctionChooser($rowToPush, $corresXMLElement, 'asn');
+            $self->parsingFunctionChooser($rowToPush, 'asn', $key);
         }
     }
-    
+
     return \%tmpHash;
 }
 
@@ -193,6 +231,67 @@ sub commentToString {
     return $comment;
 }
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Add a pocLink reference row to the proper binding table. 
+# this function assumes that you have created the table before
+# hand.
+# 
+#   @param the table to parse the pocLinks to.
+#   @param the column name of the handle that the pocLinks 
+#       belong to. (e.g. pass in asnHandle if you found the 
+#       pocLinks element in the asn element)
+#   @param the pocsLink element that is a hash (from XMLin).
+sub addPocLinks {
+    my $self = shift;
+    my $tableToUpdate = shift;
+    my $parentHandle = shift;
+    my $pocLinks = shift;
+    
+    #Begin parsing the poc links.
+    #First see if dealing with a hash or an array of hashes.
+    #Then parse accordingly.
+    my @table = @{$TABLES->{$tableToUpdate}};
+    my %colMapps = %{$COLUMN_TO_XML_MAPPINGS->{$tableToUpdate}};
+    if(ref($pocLinks->{'pocLink'}) eq 'ARRAY') {
+        foreach(@{$pocLinks->{'pocLink'}}) {
+            my %tmpHash = ();
+            $tmpHash{$table[0]} = $parentHandle; 
+            $tmpHash{$table[1]} = 
+                $_->{$colMapps{$table[1]}}; #get value of handle
+            $tmpHash{$table[2]} = 
+                $_->{$colMapps{$table[2]}}; #get value of function
+            $tmpHash{$table[3]} = 
+                $_->{$colMapps{$table[3]}}; #Get value of description
+
+            push @{$self->{BUFFER}->{$tableToUpdate}}, \%tmpHash;
+        }
+
+#        print Dumper $self->{BUFFER}->{$tableToUpdate};
+        return 1;
+    }
+    elsif(ref($pocLinks->{'pocLink'}) eq 'HASH') {
+        my $pocLink = $pocLinks->{'pocLink'};
+
+        my %tmpHash = ();
+        $tmpHash{$table[0]} = $parentHandle; 
+        $tmpHash{$table[1]} = 
+            $pocLink->{$colMapps{$table[1]}}; #get value of handle
+        $tmpHash{$table[2]} = 
+            $pocLink->{$colMapps{$table[2]}}; #get value of function
+        $tmpHash{$table[3]} = 
+            $pocLink->{$colMapps{$table[3]}}; #Get value of description
+        
+        push @{$self->{BUFFER}->{$tableToUpdate}}, \%tmpHash;
+        return 1;
+    }
+    elsif(!defined($pocLinks->{'pocLink'})) {return 1;}
+    else {
+        print "Unexpected value when received a pocLinks element to parse.\n";
+        print Dumper $pocLinks; 
+        
+        return 0;
+    }
+}#END addPocLinks
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Converts an address to a string so that it may be added 
@@ -201,7 +300,7 @@ sub commentToString {
 #   @param The address hash to parse.
 #
 #   @return The address as a single string.
-sub commentToString {
+sub addressToString {
     my $self = shift;
     my $commentToParse = shift;
 
@@ -235,43 +334,46 @@ sub commentToString {
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Formats the hash data so that it can be inserted 
-# into a table that binds Pocs to Asns
-#
-#   @param a asnHandle the pocLink belongs to.
-#   @param the pocLink
-sub asns_Pocs {
-    my $self = shift;
-    my $asnHandle = shift;
-    my $pocLink = shift;
-}
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # parsingFunctionChooser pretty much serves as a front 
 # controller. If there is an xml element that needs extra 
 # parsing define a new function and add the exception here.
 # 
 #   @param the rowToPush (expects the same hash as the function
 #       that called parsingFunctionChooser)
-#   @param the parent element of element to parse.
-#   @param the element to parse. This element will trigger 
-#       the correct function call.
+#   @param the element to parse in the rowToPush hash.
+#   @param the sub element to parse in the hash.
 #
 #   @return the parsed value as a string.
 sub parsingFunctionChooser {
+    #print "Args: ". Dumper \@_; exit;
+
     my $self = shift;
     my $rowToPush = shift;
     my $elementToParse = shift;
-    my $parentElement = shift;
+    my $subElementToParse = shift;
+
+#    print "-----------------------------\n";
+#        print 
+#            "Rw:    $rowToPush\n".
+#            "El:    $elementToParse\n".
+#            "Sel:   $subElementToParse\n";
+#    print "-----------------------------\n";
 
     my $result = undef;
-    if($parentElement eq 'asn') {
-       if($elementToParse eq 'comment') {
-            $result = $self->commentToString($rowToPush->{$elementToParse}, $elementToParse);
-       }
+    if($elementToParse eq 'asn') {
+        if($subElementToParse eq 'comment') {
+            $result = $self->commentToString($rowToPush->{$subElementToParse});
+        }
+        elsif($subElementToParse eq 'pocLinks') {
+            $result = $self->addPocLinks('Asns_Pocs', $rowToPush->{'handle'}, $rowToPush->{$subElementToParse});
+        }
+        else {
+            print "Unexpected element $subElementToParse\n";
+        }
     }
     else {
-        print "parsingFunctionChooser: Undable to find a function to parse $elementToParse that belongs to $parentElement\n";
+        print "parsingFunctionChooser: Undable to find a function to parse $elementToParse that belongs to $subElementToParse\n";
+        exit;
     }
 
     return $result;
@@ -326,14 +428,14 @@ sub insertAndFlushBuffer {
         $self->{SCHEMA_OBJECT}->resultset($bufferTableToFlush)->populate(
                 $self->{BUFFER}->{$bufferTableToFlush}
             );
-        $self->{BUFFER}->{$bufferTableToFlush} = [];#[$self->{BUFFER}->{$bufferTableToFlush}->[0]];
+        $self->{BUFFER}->{$bufferTableToFlush} = [];
     }
     else {
         foreach my $table (keys $self->{BUFFER}) {
             $self->{SCHEMA_OBJECT}->resultset($table)->populate(
                 $self->{BUFFER}->{$table}
             );
-            $self->{BUFFER}->{$table} = [];#[$self->{BUFFER}->{$table}->[0]];
+            $self->{BUFFER}->{$table} = [];
         }
     }
 }
