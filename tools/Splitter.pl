@@ -58,7 +58,7 @@ while (my $line = <IN>) {
             print "First line: $line\n\n";
             $fileToWriteTo = "arin_db_$newState.xml";
             open OUT, ">>$fileToWriteTo";
-            print OUT "\n\n".FL_START."\n\n";
+            print OUT FL_START."\n\n";
             print OUT $line;
             $currOUT = *OUT;
 
