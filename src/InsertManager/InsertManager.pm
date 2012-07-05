@@ -121,11 +121,11 @@ sub addRowToBuffer {
         #Determine wich table the hash goes to. Ignore the case
         #of $key
         if($key =~ m/asn/i) {
-            #push @{$self->{BUFFER}->{'Asns'}}, $self->asnsAddRow($value);
-            #if(@{$self->{BUFFER}->{'Asns'}} == $self->{BUFFER_SIZE}) {
-            #    $self->insertAndFlushBuffer('Asns');
-            #    $self->insertAndFlushBuffer('Asns_Pocs');
-            #}
+            push @{$self->{BUFFER}->{'Asns'}}, $self->asnsAddRow($value);
+            if(@{$self->{BUFFER}->{'Asns'}} == $self->{BUFFER_SIZE}) {
+                $self->insertAndFlushBuffer('Asns');
+                $self->insertAndFlushBuffer('Asns_Pocs');
+            }
         }
         else {
             $self->insertAndFlushBuffer;

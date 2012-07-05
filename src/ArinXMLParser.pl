@@ -23,8 +23,8 @@ use constant {
 
 #my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_test.xml";
 #my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db.xml";
-my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_ASN.xml";
 #my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_ASN.xml";
+my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_POC.xml";
 print getcwd."\n";
 dumpXMLToSQLDB($xmlPath, dbms => 'mysql', database => 'BulkWhois', 
                 hostAddress => 'localhost', username => 'root', 
