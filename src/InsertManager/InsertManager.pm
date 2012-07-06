@@ -4,72 +4,21 @@
 # table. This elimates all the nasty details. A nice feature
 # to InsertManager is that it will buffer up all the inserts
 # and then perform a bulk insert.
+#
+# @dependency InsertManager::Mappings
+#
 package InsertManager::InsertManager;
 
 use strict;
 use warnings;
 use Data::Dumper;
 use BulkWhois::Schema;
+use InsertManager::Mappings;    #qw($TABLES $ELEMENTS_THAT_NEED_EXTRA_PARSING 
+                                #   $COLUMN_TO_XML_MAPPINGS $XML_TO_COLUMN_MAPPINGS);
 use Scalar::Util 'blessed';
 
-#These are the tables that InsertManager will expect to find in the DBIx::Class object.
-# If you add a new table make sure to update this hash. If you update a column name or 
-# add a new column update this hash. AKA reflect any changes made in this hash.
-# NOTE If the xml data is not in a string format then you may need to add an exception
-# in $COLUMNS_THAT_NEED_EXTRA_PARSING hash for extra parsing. (you will need to create a 
-# function also)
-my $TABLES = {
-    'Asns' => [qw/asnHandle orgHandle ref startAsNumber endAsNumber name registrationDate updateDate comment/],
-    'Asns_Pocs' => [qw/asnHandle pocHandle function description/] #The handles need to be in the same order as the table naming scheme. In this case the asnHandle is first and the pocHandle is second. 
-};
-
-#Some elements in the xml file can be parsed into a single column. For example the 
-#comments element in the BulkWhois XML dump doesn't need to be seperated into lines.
-#This hash contains keys of all the main BulkWhois elements sub elements that will need
-#extra processsing.
-my $ELEMENTS_THAT_NEED_EXTRA_PARSING = {
-    'asn' => {
-        comment => 1,
-        pocLinks => 1
-    }
-};
-
-#Allows InsertManager to recognize xml elements and attributes from an XML::Simple hash
-# with their corresponding column entries in the database. 
-my $COLUMN_TO_XML_MAPPINGS = {
-    'Asns' => {
-        $TABLES->{'Asns'}->[0] => 'handle',
-        $TABLES->{'Asns'}->[1] => 'orgHandle',
-        $TABLES->{'Asns'}->[2] => 'ref',
-        $TABLES->{'Asns'}->[3] => 'startAsNumber',
-        $TABLES->{'Asns'}->[4] => 'endAsNumber',
-        $TABLES->{'Asns'}->[5] => 'name',
-        $TABLES->{'Asns'}->[6] => 'registrationDate',
-        $TABLES->{'Asns'}->[7] => 'updateDate',
-        $TABLES->{'Asns'}->[8] => 'comment'
-    },
-    'Asns_Pocs' => {
-        $TABLES->{'Asns_Pocs'}->[0] => 'asnHandle',
-        $TABLES->{'Asns_Pocs'}->[1] => 'handle',
-        $TABLES->{'Asns_Pocs'}->[2] => 'function',
-        $TABLES->{'Asns_Pocs'}->[3] => 'description'
-    }
-};
-
-#The inverse of COLUMN_TO_XML_MAPPINGS
-my $XML_TO_COLUMN_MAPPINGS = {
-    'Asns' => reverse $COLUMN_TO_XML_MAPPINGS->{'Asns_Pocs'},
-    'Asns_Pocs' => reverse $COLUMN_TO_XML_MAPPINGS->{'Asns'}
-};
-
-#The default key to look for when finding the value of an element in an
-#XML::Simple hash.
-my $DEFAULT_ELEMENT_TEXT_KEY = undef;
-
-#print "Dump of MAP " . Dumper $XML_TO_COLUMN_MAPPINGS;exit;
-
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Create a new InsertManager. The 
+# Create a new InsertManager. 
 #   
 #   @param bufferSize => 'the buffer size'. The maximum size 
 #       of the buffer before a bulk insert is performed.
@@ -102,6 +51,7 @@ sub new {
     }
 #    print Dumper $self->{BUFFER};
 
+
     #Perform the blessing
     bless $self, $class;
 
@@ -121,12 +71,18 @@ sub addRowToBuffer {
         #Determine wich table the hash goes to. Ignore the case
         #of $key
         if($key =~ m/asn/i) {
-            push @{$self->{BUFFER}->{'Asns'}}, $self->asnsAddRow($value);
+            push @{$self->{BUFFER}->{'Asns'}}, $self->simpleHashForRowHash($value, 'Asns', 'asn');
             if(@{$self->{BUFFER}->{'Asns'}} == $self->{BUFFER_SIZE}) {
                 $self->insertAndFlushBuffer('Asns');
                 $self->insertAndFlushBuffer('Asns_Pocs');
             }
         }
+#        elsif($key =~ m/poc/i) { 
+#            push @{$self->{BUFFER}->{'Pocs'}}, $self->simpleHashForRowHash($value, 'Pocs', 'poc');
+#            if(@{$self->{BUFFER}->{'Pocs'}} == $self->{BUFFER_SIZE}) {
+#                $self->insertAndFlushBuffer('Pocs');
+#            }
+#        }
         else {
             $self->insertAndFlushBuffer;
             print Dumper $key, $value;
@@ -140,51 +96,52 @@ sub addRowToBuffer {
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Formats data into an array so that it can be inserted into
-# the asns table. Makes sure that the elements of the 
-# simple hash are ordered to match the ordering of the 
-# columns in the asns table. Refer to the constants 
-# hash at the top of the file if you wish to change the
-# ordering.
+# Takes in a hash from XML::Simple::XMLin and converts it 
+# into a hash that can used by DBIx::Class::Schema::populate.
+#
+#   @dependency Mappings.pm
 #
 #   @param a row to push into the database. The expected variable type
 #       is a hash that has been produced by XML::Simple::XMLin(...)
+#   @param the corresponding table to parse the return hash to.
+#   @param the name of the element being parsed.
 #
 #   @return a hash that can be used by the populate method in DBIx::Class::Schema object.
-sub asnsAddRow {
+sub simpleHashForRowHash {
     my $self = shift;
     my $rowToPush = shift;
-
+    my $table = shift;
+    my $element = shift;
+    
     my %tmpHash = ();
     #parse all of the simple elements in the hash.
-    foreach(@{$TABLES->{'Asns'}}) {
-        my $corresXMLElement = ${$COLUMN_TO_XML_MAPPINGS->{'Asns'}}{$_}; #Get the column that corresponds to the xml element.
+    foreach(@{$TABLES->{$table}}) {
+        my $corresXMLElement = ${$COLUMN_TO_XML_MAPPINGS->{$table}}{$_}; #Get the column that corresponds to the xml element.
 
         
-        if(!$ELEMENTS_THAT_NEED_EXTRA_PARSING->{'asn'}->{$corresXMLElement}) {
+        if(!$ELEMENTS_THAT_NEED_EXTRA_PARSING->{$element}->{$corresXMLElement}) {
             $tmpHash{$_} = $rowToPush->{$corresXMLElement};
         }
     }
 
     #Go through all of the elements that need extra parsing
-    foreach my $key (keys $ELEMENTS_THAT_NEED_EXTRA_PARSING->{'asn'}) {
-        my $column = $XML_TO_COLUMN_MAPPINGS->{'Asns'}->{$key};
-        
+    foreach my $key (keys $ELEMENTS_THAT_NEED_EXTRA_PARSING->{$element}) {
+        my $column = $XML_TO_COLUMN_MAPPINGS->{$table}->{$key};
 
 #        print "Key: ". Dumper $key;
 #        print "Column: ". Dumper $column;
 #        print "Row: " . Dumper $rowToPush;
 
-
         #If there is a mapping then call the parsingFunctionChooser and 
         #push the result into the tmpHash.
         if(defined($column)) {    
-            $tmpHash{$column} = $self->parsingFunctionChooser($rowToPush, 'asn', $column);
+            $tmpHash{$column} = $self->parsingFunctionChooser($rowToPush, $element, $column);
         }
-        #If column is null then call the parsingFunctionChooser and let it call 
-        #a function to handle the data properly.
+        #If column is null then call the parsingFunctionChooser and assume that the 
+        # function parsingFunctionChooser calls will insert the data into another
+        # table. 
         else {
-            $self->parsingFunctionChooser($rowToPush, 'asn', $key);
+            $self->parsingFunctionChooser($rowToPush, $element, $key);
         }
     }
 
