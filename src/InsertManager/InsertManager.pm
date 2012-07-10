@@ -274,21 +274,30 @@ sub addPhones {
     }
     elsif(ref($phones->{'phone'}) =~ m/ARRAY/) {
         #my @hashArray = ();
+        #print Dumper $phones->{'phone'};
         foreach(@{$phones->{'phone'}}) {  
-            
+            my $handle = $_->{'number'}->{'pocHandle'};
+            if($handle ne $parentHandle) {
+                print "The parent handle $parentHandle doesn't match";
+                print "the handle $handle in the phone element\n";
+                exit;
+            }
         }
-
     }
     elsif(ref($phones->{'phone'}) =~ m/HASH/) { 
-        print "Found a hasn\n";
-        print Dumper $phones;exit;
+        my $handle = $phones->{'phone'}->{'number'}->{'pocHandle'};
+        if($handle ne $parentHandle) {
+            print "The parent handle $parentHandle doesn't match";
+            print "the handle $handle in the phone element\n";
+            exit;
+        }
     }
     else { 
         print "Unexpected value when received an email element to parse.\n";
         print Dumper $phones; 
         exit;
     }
-}#END addEmails
+}#END addPhones
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Add a pocLink reference row to the proper binding table. 
