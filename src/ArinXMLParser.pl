@@ -160,6 +160,8 @@ sub dumpXMLToSQLDB {
             } if(($counter % 1000) == 0);
         }#END IF
     }#END WHILE
+    $insertManager->insertAndFlushBuffer;
+
     my $endTime = time;
     $deltaTime = $endTime - $startTime;
     print "$deltaTime seconds was required to parse the XML file\n" if($verbose || $debug);

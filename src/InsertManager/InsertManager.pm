@@ -16,6 +16,8 @@ use BulkWhois::Schema;
 use InsertManager::Mappings;    #qw($TABLES $ELEMENTS_THAT_NEED_EXTRA_PARSING 
                                 #   $COLUMN_TO_XML_MAPPINGS $XML_TO_COLUMN_MAPPINGS);
 use Scalar::Util 'blessed';
+use JSON;
+use Switch;
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Create a new InsertManager. 
@@ -77,12 +79,13 @@ sub addRowToBuffer {
                 $self->insertAndFlushBuffer('Asns_Pocs');
             }
         }
-#        elsif($key =~ m/poc/i) { 
-#            push @{$self->{BUFFER}->{'Pocs'}}, $self->simpleHashForRowHash($value, 'Pocs', 'poc');
-#            if(@{$self->{BUFFER}->{'Pocs'}} == $self->{BUFFER_SIZE}) {
-#                $self->insertAndFlushBuffer('Pocs');
-#            }
-#        }
+        elsif($key =~ m/poc/i) { 
+            push @{$self->{BUFFER}->{'Pocs'}}, $self->simpleHashForRowHash($value, 'Pocs', 'poc');
+            if(@{$self->{BUFFER}->{'Pocs'}} == $self->{BUFFER_SIZE}) {
+                $self->insertAndFlushBuffer('Pocs');
+                $self->insertAndFlushBuffer('Pocs_Emails');
+                }
+        }
         else {
             $self->insertAndFlushBuffer;
             print Dumper $key, $value;
@@ -93,7 +96,7 @@ sub addRowToBuffer {
 
         $self->{ITEMS_PROCESSED}++;
     }
-}
+}#END addRowToBuffer
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Takes in a hash from XML::Simple::XMLin and converts it 
@@ -131,22 +134,28 @@ sub simpleHashForRowHash {
 #        print "Key: ". Dumper $key;
 #        print "Column: ". Dumper $column;
 #        print "Row: " . Dumper $rowToPush;
+#        print "Table: " . Dumper $table;
+#        print "Mappings: ". Dumper $XML_TO_COLUMN_MAPPINGS->{$table};
 
         #If there is a mapping then call the parsingFunctionChooser and 
         #push the result into the tmpHash.
         if(defined($column)) {    
-            $tmpHash{$column} = $self->parsingFunctionChooser($rowToPush, $element, $column);
+            $tmpHash{$column} = $self->parsingFunctionChooser($rowToPush, $element, $key);
+#            print "Value added to $table\n";
+#            print "----------------------------\n";
         }
         #If column is null then call the parsingFunctionChooser and assume that the 
         # function parsingFunctionChooser calls will insert the data into another
         # table. 
         else {
             $self->parsingFunctionChooser($rowToPush, $element, $key);
+#            print "Value added to another table\n";
+#            print "----------------------------\n";
         }
     }
-
+        
     return \%tmpHash;
-}
+}#END simpleHashForRowHash
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Converts a comment into a string so that it may be added 
@@ -186,7 +195,100 @@ sub commentToString {
     }
 
     return $comment;
-}
+}#END commentToString
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Add a row to a *_Emails table
+#
+#   @param the emails to add.
+#   @param the pocHandle they belong to
+sub addEmails {
+    my $self = shift;
+    my $tableToUpdate = shift;
+    my $parentHandle = shift;
+    my $emails = shift;
+
+#    print "\n\nTable To Update: $tableToUpdate\n";
+#    print "Parent Handle: $parentHandle\n";
+#    print "Emails: ". Dumper $emails;
+#    print "Is of type: ". ref($emails->{'email'})."\n";
+
+    my @table = @{$TABLES->{$tableToUpdate}};
+    my %colMapps = %{$COLUMN_TO_XML_MAPPINGS->{$tableToUpdate}};
+    if(!defined($emails) || !defined($emails->{'email'})) {
+#        print "No email found for this element\n";
+        return;
+    }
+    elsif(ref($emails->{'email'}) =~ m/ARRAY/) {
+        foreach(@{$emails->{'email'}}) { 
+            if(ref($_) =~ m/HASH/) {#Just incase there is extra data in the emails element
+                print "Unhandled xml simple hash structure.\n";
+                print "I was expecting an array of scalars but I got this.\n";
+                print '$_: '.Dumper $_;
+                print "tableToUpdate: $tableToUpdate\n";
+                print "parentHandle: $parentHandle\n";
+                print "emails: ".Dumper $emails;
+                exit;
+            }
+
+            my %tmpHash = ();
+            $tmpHash{$TABLES->{$tableToUpdate}->[0]} = $parentHandle; #Always assumes that column 0 stores the parentHandle in the database.
+            $tmpHash{$TABLES->{$tableToUpdate}->[1]} = $_; #Same for column 1 but for email
+            push @{$self->{BUFFER}->{$tableToUpdate}}, \%tmpHash;
+        }
+             
+        return;
+    }
+    elsif(ref($emails->{'email'}) eq '') {
+        my $tmpHash = {
+            $TABLES->{$tableToUpdate}->[0] => $parentHandle, 
+            $TABLES->{$tableToUpdate}->[1] => $emails->{'email'}
+        };
+        push @{$self->{BUFFER}->{$tableToUpdate}}, $tmpHash;
+        return;
+    }
+    else {
+        print "Unexpected value when received an email element to parse.\n";
+        print Dumper $emails; 
+        exit;
+    }
+}#END addEmails
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Adds a set of phone numbers to a table and binds them 
+# to a handle. The function will also store the phone
+# type if available.
+#
+#   @param the table to update.
+#   @param the handle of the element the phones element was
+#       found in.
+#   @param the phones to add.
+sub addPhones {
+    my $self = shift;
+    my $tableToUpdate = shift;
+    my $parentHandle = shift;
+    my $phones = shift;
+
+    if(!defined($phones) || !defined($phones->{'phone'})) {
+        return;
+    }
+    elsif(ref($phones->{'phone'}) =~ m/ARRAY/) {
+        #my @hashArray = ();
+        foreach(@{$phones->{'phone'}}) {  
+            
+        }
+
+    }
+    elsif(ref($phones->{'phone'}) =~ m/HASH/) { 
+        print "Found a hasn\n";
+        print Dumper $phones;exit;
+    }
+    else { 
+        print "Unexpected value when received an email element to parse.\n";
+        print Dumper $phones; 
+        exit;
+    }
+}#END addEmails
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Add a pocLink reference row to the proper binding table. 
@@ -245,7 +347,7 @@ sub addPocLinks {
     else {
         print "Unexpected value when received a pocLinks element to parse.\n";
         print Dumper $pocLinks; 
-        
+       
         return 0;
     }
 }#END addPocLinks
@@ -259,36 +361,36 @@ sub addPocLinks {
 #   @return The address as a single string.
 sub addressToString {
     my $self = shift;
-    my $commentToParse = shift;
+    my $addressToParse = shift;
 
-    my $comment = undef;
+    my $address = undef;
 
     #First see if dealing with a hash or an array of hashes.
     #Then parse accordingly.
-    if(ref($commentToParse->{'line'}) eq 'ARRAY') {
-        my $count = @{$commentToParse->{'line'}}; 
-        my @comments = ('')x$count;
+    if(ref($addressToParse->{'line'}) eq 'ARRAY') {
+        my $count = @{$addressToParse->{'line'}}; 
+        my @addressLines = ('')x$count;
 
         #Map the comment contents of the array to their proper location in the comment only array.
         map { 
-                $comments[$_->{'number'}] = ($_->{$self->defaultElementTextKey}) 
+                $addressLines[$_->{'number'}] = ($_->{$self->defaultElementTextKey}) 
                                             ? $_->{$self->defaultElementTextKey}
                                             : ''
             }
-            @{$commentToParse->{'line'}};
-        $comment = join " ", @comments;
+            @{$addressToParse->{'line'}};
+        $address = join "\n", @addressLines;
     }
-    elsif(ref($commentToParse->{'line'}) eq 'HASH') {
-        $comment = $commentToParse->{'line'}->{$self->defaultElementTextKey};
+    elsif(ref($addressToParse->{'line'}) eq 'HASH') {
+        $address = $addressToParse->{'line'}->{$self->defaultElementTextKey};
     }
-    elsif(!defined($commentToParse->{line})) {}
+    elsif(!defined($addressToParse->{line})) {}
     else {
         print "Unexpected value when received an address to parse.\n";
-        print Dumper $commentToParse; 
+        print Dumper $addressToParse; 
     }
 
-    return $comment;
-}
+    return $address;
+}#END addressToString
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # parsingFunctionChooser pretty much serves as a front 
@@ -302,8 +404,6 @@ sub addressToString {
 #
 #   @return the parsed value as a string.
 sub parsingFunctionChooser {
-    #print "Args: ". Dumper \@_; exit;
-
     my $self = shift;
     my $rowToPush = shift;
     my $elementToParse = shift;
@@ -317,24 +417,58 @@ sub parsingFunctionChooser {
 #    print "-----------------------------\n";
 
     my $result = undef;
-    if($elementToParse eq 'asn') {
-        if($subElementToParse eq 'comment') {
-            $result = $self->commentToString($rowToPush->{$subElementToParse});
+    switch ($elementToParse) {
+        case 'asn' {
+            switch ($subElementToParse) {
+                case 'comment' {        
+                    $result = $self->commentToString($rowToPush->{$subElementToParse});
+                }
+                case 'pocLinks' {
+                    $result = $self->addPocLinks('Asns_Pocs', $rowToPush->{'handle'}, 
+                                            $rowToPush->{$subElementToParse}
+                                            );
+                }
+                else {
+                    print "Unexpected element $subElementToParse for $elementToParse\n";
+                }
+            }
         }
-        elsif($subElementToParse eq 'pocLinks') {
-            $result = $self->addPocLinks('Asns_Pocs', $rowToPush->{'handle'}, $rowToPush->{$subElementToParse});
+        case 'poc' {
+            switch ($subElementToParse) {
+                case 'streetAddress' { 
+                    $result = $self->addressToString($rowToPush->{$subElementToParse});
+                }
+                case 'isRoleAccount' {
+                    my $isRoleAccount = $rowToPush->{$subElementToParse};
+                    $result = ($isRoleAccount =~ m/Y/) ? 1 : 0;
+                }
+                case 'iso3166-1' {
+                    my $iso3166_1 = $rowToPush->{$subElementToParse};
+                    $result = encode_json $iso3166_1;
+                }
+                case 'emails' {
+                    $self->addEmails('Pocs_Emails', $rowToPush->{'handle'}, 
+                                    $rowToPush->{$subElementToParse});
+                }
+                case 'phones' {
+                    $self->addPhones('Pocs_Phones', $rowToPush->{'handle'},
+                                    $rowToPush->{$subElementToParse});
+                    print "Add phones to a table\n";
+                }
+                else {
+                    print "Unexpected element $subElementToParse for $elementToParse\n";
+                    exit;
+                }
+            }
         }
         else {
-            print "Unexpected element $subElementToParse\n";
+            print "parsingFunctionChooser: Unable to find a function to parse $subElementToParse that belongs to $elementToParse\n";
+            exit;
         }
-    }
-    else {
-        print "parsingFunctionChooser: Undable to find a function to parse $elementToParse that belongs to $subElementToParse\n";
-        exit;
     }
 
     return $result;
-}
+}#END parsingFunctionChooser
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Set or get the size of the buffer for InsertManager.

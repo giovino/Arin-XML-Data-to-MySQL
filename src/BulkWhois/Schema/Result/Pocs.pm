@@ -28,10 +28,10 @@ __PACKAGE__->add_columns(
     'middleName'	=> {data_type => 'varchar',	size => 255,	is_nullable => 1},
     'lastName'		=> {data_type => 'varchar',	size => 255,	is_nullable => 1},
     'postalCode'	=> {data_type => 'varchar',	size => 255,	is_nullable => 1},
-    'iso3166-2'		=> {data_type => 'varchar',	size => 23,	is_nullable => 1},
+    'iso3166_2'		=> {data_type => 'varchar',	size => 23,	is_nullable => 1},
     'updateDate'        => {data_type => 'datetime',    is_nullable => 1},
     'address'   	=> {data_type => 'varchar',	size => 1023,   is_nullable => 1},
-    'iso3166-1'		=> {data_type => 'varchar',	size => 511,	is_nullable => 1},
+    'iso3166_1'		=> {data_type => 'varchar',	size => 511,	is_nullable => 1},
     'isRoleAccount'     => {data_type => 'boolean',     is_nullable => 0}
 );
 

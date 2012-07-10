@@ -7,6 +7,7 @@ package InsertManager::Mappings;
 
 use warnings;
 use strict;
+use Data::Dumper;
 
 use base 'Exporter';
 our @EXPORT = qw($TABLES $ELEMENTS_THAT_NEED_EXTRA_PARSING 
@@ -21,8 +22,10 @@ our @EXPORT = qw($TABLES $ELEMENTS_THAT_NEED_EXTRA_PARSING
 our $TABLES = {
     'Asns'      => [qw/asnHandle orgHandle ref startAsNumber endAsNumber name registrationDate updateDate comment/],
     'Asns_Pocs' => [qw/asnHandle pocHandle function description/], #The handles need to be in the same order as the table naming scheme. In this case the asnHandle is first and the pocHandle is second. 
-    'Pocs'      => [qw/pocHandle ref city registrationDate firstName middleName lastName companyName postalCode updateDate iso3166-1 iso3166-2 isRoleAccount/],
-    'Nets_Pocs' => [qw/pocHandle netHandle/] 
+    'Pocs'      => [qw/pocHandle ref city registrationDate firstName middleName lastName companyName postalCode updateDate iso3166_1 iso3166_2 isRoleAccount address/],
+    'Nets_Pocs' => [qw/pocHandle netHandle/],
+    'Pocs_Emails' => [qw/pocHandle email/],
+    'Pocs_Phones' => [qw/pocHandle phoneNumber phoneType/]
 };
 
 #Some elements in the xml file can be parsed into a single column. For example the 
@@ -31,10 +34,16 @@ our $TABLES = {
 #extra processsing.
 our $ELEMENTS_THAT_NEED_EXTRA_PARSING = {
     'asn' => {
-        comment => 1,
-        pocLinks => 1
+        comment     => 1,   #Convert to a string
+        pocLinks    => 1    #Add to Asns_Pocs
    },
-    'poc' => {}
+    'poc' => {
+        'iso3166-1'     => 1,   #convert to json
+        emails          => 1,   #Add to Pocs_Emails
+        isRoleAccount   => 1,   #Convert to a tiny int.
+        phones          => 1,   #Add to a table in the future
+        streetAddress   => 1    #Convert to a string.
+    }
 };
 
 #Allows InsertManager to recognize xml elements and attributes from an XML::Simple hash
@@ -58,22 +67,34 @@ our $COLUMN_TO_XML_MAPPINGS = {
         $TABLES->{'Asns_Pocs'}->[3] => 'description'
     }, 
     'Pocs' => {
-        $TABLES->{'Pocs'}->[0] => 'handle',
-        $TABLES->{'Pocs'}->[1] => 'ref',
-        $TABLES->{'Pocs'}->[2] => 'city',
-        $TABLES->{'Pocs'}->[3] => 'registrationDate',
-        $TABLES->{'Pocs'}->[4] => 'firstName',
-        $TABLES->{'Pocs'}->[5] => 'lastName',
-        $TABLES->{'Pocs'}->[6] => 'postalCode',
-        $TABLES->{'Pocs'}->[7] => 'updateDate'
+        $TABLES->{'Pocs'}->[0]  => 'handle',
+        $TABLES->{'Pocs'}->[1]  => 'ref',
+        $TABLES->{'Pocs'}->[2]  => 'city',
+        $TABLES->{'Pocs'}->[3]  => 'registrationDate',
+        $TABLES->{'Pocs'}->[4]  => 'firstName',
+        $TABLES->{'Pocs'}->[5]  => 'middleName',
+        $TABLES->{'Pocs'}->[6]  => 'lastName',
+        $TABLES->{'Pocs'}->[7]  => 'companyName',
+        $TABLES->{'Pocs'}->[8]  => 'postalCode',
+        $TABLES->{'Pocs'}->[9]  => 'updateDate',
+        $TABLES->{'Pocs'}->[10] => 'iso3166-1',
+        $TABLES->{'Pocs'}->[11] => 'iso3166-2',
+        $TABLES->{'Pocs'}->[12] => 'isRoleAccount',
+        $TABLES->{'Pocs'}->[13] => 'streetAddress'
+    },
+    #'Pocs_Emails' => [qw/pocHandle email/],
+    'Pocs_Emails' => {
+        $TABLES->{'Pocs_Emails'}->[0] => 'pocHandle',
+        $TABLES->{'Pocs_Emails'}->[1] => 'email'
     }
+    #'Pocs_Phones' => [qw/pocHandle phoneNumber phoneType/]
 };
 
-#The inverse of COLUMN_TO_XML_MAPPINGS
 our $XML_TO_COLUMN_MAPPINGS = {
-    'Asns' => reverse $COLUMN_TO_XML_MAPPINGS->{'Asns_Pocs'},
-    'Asns_Pocs' => reverse $COLUMN_TO_XML_MAPPINGS->{'Asns'}
+    'Asns'          => {reverse %{$COLUMN_TO_XML_MAPPINGS->{'Asns'}}},
+    'Asns_Pocs'     => {reverse %{$COLUMN_TO_XML_MAPPINGS->{'Asns_Pocs'}}},
+    'Pocs'          => {reverse %{$COLUMN_TO_XML_MAPPINGS->{'Pocs'}}},
+    'Pocs_Emails'   => {reverse %{$COLUMN_TO_XML_MAPPINGS->{'Pocs_Emails'}}}
 };
-
 
 return 1;
