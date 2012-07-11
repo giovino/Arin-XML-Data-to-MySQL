@@ -8,6 +8,7 @@
 # @dependency InsertManager::Mappings
 #
 package InsertManager::InsertManager;
+use base qw/InsertManager::InsertManagerInterface/; #Implement the interface
 
 use strict;
 use warnings;
@@ -19,6 +20,9 @@ use Scalar::Util 'blessed';
 use JSON;
 use Switch;
 use Socket; #inet_pton function to convert text ipv4 and ipv6 to binary form
+
+use XML::Simple; #It may be easer to use xml simple for each child elment (asn, org, net, and poc).
+$XML::Simple::PREFERRED_PARSER = 'XML::LibXML::SAX'; #Makes XML::Simple Run faster
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Create a new InsertManager. 
@@ -44,7 +48,7 @@ sub new {
     $self->{SCHEMA_OBJECT} = $schemaObj; 
     $self->{ITEMS_PROCESSED} = 0;
     $self->{BUFFER} = {};
-    $self->{DEFAULT_ELEMENT_TEXT_KEY} = {};
+    $self->{DEFAULT_ELEMENT_TEXT_KEY} = undef;
 
     #Initialize the buffer with all of the sub buffers for the tables.
     #The format will be key => array pairs.
@@ -59,6 +63,38 @@ sub new {
     bless $self, $class;
 
     return $self;
+}
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# This method is overriding InsertManager::InsertManagerInterface::parseXML.
+# All it does is it takes in a sub element and uses 
+# XML::Simple::XMLin to convert it into a hash. It then 
+# passes that hash to addRowToBuffer for processing.
+#
+# @param xml
+sub parseXML {
+    my $self = shift;
+    my $xml = shift;
+    my $xmlElementName = shift;
+
+    if(!defined $self->{DEFAULT_ELEMENT_TEXT_KEY}) {
+        die "Please set the ContentKey for XMLin by calling the method defaultElementTextKey and setting a value\n";
+    }
+    
+    #Use XML::Simple to load each element into memory directly.
+    my %parsedXML = ();
+    $parsedXML{$xmlElementName} = XMLin($xml, ForceContent => 0, ForceArray => 0,  ContentKey => $self->{DEFAULT_ELEMENT_TEXT_KEY});
+            
+    #Push the hash into the InsertManager object. 
+    $self->addRowToBuffer(\%parsedXML);
+}#END parseXML
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Overrides InsertManager::InsertManagerInterface::endParsing
+sub endParsing {
+    my $self = shift;
+
+    $self->insertAndFlushBuffer;
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -139,7 +175,6 @@ sub simpleHashForRowHash {
     foreach(@{$TABLES->{$table}}) {
         my $corresXMLElement = ${$COLUMN_TO_XML_MAPPINGS->{$table}}{$_}; #Get the column that corresponds to the xml element.
 
-        
         if(!$ELEMENTS_THAT_NEED_EXTRA_PARSING->{$element}->{$corresXMLElement}) {
             $tmpHash{$_} = $rowToPush->{$corresXMLElement};
         }
@@ -149,26 +184,16 @@ sub simpleHashForRowHash {
     foreach my $key (keys $ELEMENTS_THAT_NEED_EXTRA_PARSING->{$element}) {
         my $column = $XML_TO_COLUMN_MAPPINGS->{$table}->{$key};
 
-#        print "Key: ". Dumper $key;
-#        print "Column: ". Dumper $column;
-#        print "Row: " . Dumper $rowToPush;
-#        print "Table: " . Dumper $table;
-#        print "Mappings: ". Dumper $XML_TO_COLUMN_MAPPINGS->{$table};
-
         #If there is a mapping then call the parsingFunctionChooser and 
         #push the result into the tmpHash.
         if(defined($column)) {    
             $tmpHash{$column} = $self->parsingFunctionChooser($rowToPush, $element, $key);
-#            print "Value added to $table\n";
-#            print "----------------------------\n";
         }
         #If column is null then call the parsingFunctionChooser and assume that the 
         # function parsingFunctionChooser calls will insert the data into another
         # table. 
         else {
             $self->parsingFunctionChooser($rowToPush, $element, $key);
-#            print "Value added to another table\n";
-#            print "----------------------------\n";
         }
     }
         
@@ -226,11 +251,6 @@ sub addEmails {
     my $parentHandle = shift;
     my $emails = shift;
 
-#    print "\n\nTable To Update: $tableToUpdate\n";
-#    print "Parent Handle: $parentHandle\n";
-#    print "Emails: ". Dumper $emails;
-#    print "Is of type: ". ref($emails->{'email'})."\n";
-
     my @table = @{$TABLES->{$tableToUpdate}};
     my %colMapps = %{$COLUMN_TO_XML_MAPPINGS->{$tableToUpdate}};
     if(!defined($emails) || !defined($emails->{'email'})) {
@@ -248,7 +268,6 @@ sub addEmails {
                 print "emails: ".Dumper $emails;
                 exit;
             }
-
             my %tmpHash = ();
             $tmpHash{$TABLES->{$tableToUpdate}->[0]} = $parentHandle; #Always assumes that column 0 stores the parentHandle in the database.
             $tmpHash{$TABLES->{$tableToUpdate}->[1]} = $_; #Same for column 1 but for email
@@ -277,7 +296,9 @@ sub addEmails {
 # to a handle. The function will also store the phone
 # type if available.
 #
-#   @param the table to update.
+#   @dependency Mappings.pm
+#
+#   @param the table to update. (this table needs to be defined in Mappings.pm)
 #   @param the handle of the element the phones element was
 #       found in.
 #   @param the phones to add.
@@ -536,13 +557,6 @@ sub parsingFunctionChooser {
     my $elementToParse = shift;
     my $subElementToParse = shift;
 
-#    print "-----------------------------\n";
-#        print 
-#            "Rw:    $rowToPush\n".
-#            "El:    $elementToParse\n".
-#            "Sel:   $subElementToParse\n";
-#    print "-----------------------------\n";
-
     my $result = undef;
     switch ($elementToParse) {
         case 'asn' {
@@ -664,6 +678,7 @@ sub defaultElementTextKey {
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Prints the buffer to the screen.
 sub dumpBuffer {
     my $self = shift;
     my $subBuffToDump = shift;
@@ -689,11 +704,7 @@ sub insertAndFlushBuffer {
     my $self = shift;
     my $bufferTableToFlush = shift;
     $bufferTableToFlush = ($bufferTableToFlush) ? $bufferTableToFlush : 0;
-
-#    print "Flushing Buffer\n";
-
-    #print Dumper $self->{BUFFER};
-
+    
     #If a table is defined then flush only that table.
     #Otherwise flush every table in the buffer.
     if($bufferTableToFlush) { 

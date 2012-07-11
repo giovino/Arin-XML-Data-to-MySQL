@@ -9,18 +9,17 @@ use strict;
 use warnings;
 use Data::Dumper;
 use XML::LibXML::Reader; #Read the file without using too much memory
-use XML::Simple; #It may be easer to use xml simple for each child elment (asn, org, net, and poc).
 use BulkWhois::Schema;
 use InsertManager::InsertManager;
 use Cwd;
 use Scalar::Util 'blessed';
 
-$XML::Simple::PREFERRED_PARSER = 'XML::LibXML::SAX'; #Makes XML::Simple Run faster
-
 #Right now the default key that XML::Simple usees for element text is #TEXT. 
 use constant {
     ELEMENT_TEXT => '#TEXT'
 };
+
+
 
 #my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_test.xml";
 my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db.xml";
@@ -28,9 +27,32 @@ my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db.xml";
 #my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_POC.xml";
 #my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_ORG.xml";
 #my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_NET.xml";
-dumpXMLToSQLDB($xmlPath, dbms => 'mysql', database => 'BulkWhois', 
-                hostAddress => 'localhost', username => 'root', 
-                password => '12345', verbose => 1, debug => 0);
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#Connect and set up the InsertManager.
+my $dbms = 'mysql';
+my $database = 'BulkWhois';
+my $username = 'root';
+my $password = '12345';
+my $hostAddress = 'localhost';
+my $port = 3306;
+my $dsn = "dbi:$dbms:$database:$hostAddress:$port";
+my $bulkWhoisSchema = BulkWhois::Schema->connect($dsn, $username, $password);
+$bulkWhoisSchema->deploy({add_drop_table => 1}); #Start from fresh
+#my $deployStatements = $bulkWhoisSchema->deployment_statements;
+my $insertManager = InsertManager::InsertManager->new(bufferSize => 1000, schema => $bulkWhoisSchema);
+$insertManager->defaultElementTextKey(ELEMENT_TEXT); 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#begin parsing and dumping to database
+dumpXMLToSQLDB($xmlPath, 
+                dbms => $dbms, database => $database,
+                hostAddress => $hostAddress, port => $port, 
+                username => $username, password => $password,
+                insertManager => $insertManager,
+                verbose => 1, debug => 0
+);
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Parses the specified .xml Arin dump file and places it in the 
@@ -41,14 +63,7 @@ dumpXMLToSQLDB($xmlPath, dbms => 'mysql', database => 'BulkWhois',
 #
 #   @param .xml file path relative to the perl script directory or an 
 #       absolute path.
-#   @param dbms => 'dbms'. The database management system to to connect to.
-#       (any database that is supported by Class::DBI).
-#   @param database => the database to connect to. The database must 
-#       exist before running this script.
-#   @param hostAddress => 'host address'. The ip of the host.
-#   @param port => 'port no.'. The port to connect to.
-#   @param username => 'username'.
-#   @param password => 'password'.
+#   @param insertManager => an object that implements the InsertManagerInterface
 #   @param @optional verbose => 'boolean value' 1 or 0 to turn on or off verbal mode.
 #   @param @optional debug => 'boolean value' 1 or 0 to turn on or off debug mode.
 sub dumpXMLToSQLDB {
@@ -59,42 +74,8 @@ sub dumpXMLToSQLDB {
     my %args        = @_;
     my $debug       = ($args{'debug'}) ? $args{'debug'} : 0;
     my $verbose     = ($args{'verbose'}) ? $args{'verbose'} : 0;
-    my $dbms        = ($args{'dbms'}) ? $args{'dbms'} : die "You need to specify a dbms. pass in dbms => 'SQL server type' as a parameter.\n";
-    my $database   = ($args{'database'}) ? $args{'database'} : die "You need to specify a database to use. pass in database => 'a database name' as a parameter.\n";
-    my $hostAddress = ($args{'hostAddress'}) ? $args{'hostAddress'} : die "Please pass in the address of the database host. Use this syntax: hostaddress => 'ip address'.\n";
-    my $port        = ($args{'port'}) ? $args{'port'} : do { 
-        my $init = sub { 
-            print "port => 'port no.' not specified. Defaulting to port => 3306\n" if ($verbose);
-            return 3306;
-        };
-        $init->();
-    };
-    my $username    = ($args{'username'}) ? $args{'username'} : die "A username needs to be passed in. username => 'username' as a parameter.\n";
-    my $password    = ($args{'password'}) ? $args{'password'} : do { 
-        print "password => 'password' not specified. Assuming that no password is needed.\n" if ($verbose); 
-    };
+    my $insertManager   = ($args{'insertManager'}) ? $args{'insertManager'} : die "I need an object that implements the InsertManagerInterface. insertManager => an object.\n";
     print "Done getting args\n" if($debug);
-
-
-    #~~~~~~~~~~~~~~~~~~~~~~
-    #Connect and set up the InsertManager.
-    my $dsn = "dbi:$dbms:$database:$hostAddress:$port";
-    if($debug) {
-        print "\n############################################\n";
-        print "Connection Info: $dsn\n";
-        print "User: $username\n";
-        print "Password: $password\n";
-        print "############################################\n\n";
-    } 
-    my $bulkWhoisSchema = BulkWhois::Schema->connect($dsn, $username, $password);
-    #@TODO I should probably have a more intelligent deploying scheme.
-    $bulkWhoisSchema->deploy({add_drop_table => 1}); #Creates a database from the schema erase previouse db
-    my $deployStatements = $bulkWhoisSchema->deployment_statements;
-    print "$deployStatements\n" if($debug);
-
-    my $insertManager = InsertManager::InsertManager->new(bufferSize => 1000, schema => $bulkWhoisSchema);
-    $insertManager->defaultElementTextKey(ELEMENT_TEXT); 
-    #~~~~~~~~~~~~~~~~~~~~~~~~
 
     #Make sure the file path is valid. If it is then initialize an XML::LibXML::Reader 
     # object.
@@ -123,6 +104,7 @@ sub dumpXMLToSQLDB {
     print "Begin reading\n" if($debug); 
     my $startTime = time; #Start the stopwatch
     my $sT = time;  #Used to tell you the time between a refresh.
+    my $previousCounter = 0;
     while($xmlReader->read()) {
         #Go through all of the child elements of the root node. Use XML::Simple
         # to convert them into a hash. Then go through the hash and push it into 
@@ -134,17 +116,14 @@ sub dumpXMLToSQLDB {
             if(!($counter % $refreshRate) && $verbose) {
                 my $dT = time - $sT;
                 $sT = time;
+                my $dCounter = $counter - $previousCounter;
+                $previousCounter = $counter;
                 my $percentComplete = int((($xmlReader->lineNumber()) / $totalLines) * 100);
-                print "$percentComplete% of the file has been processed.\n"
-                print "     It took $dT seconds to parse $counter elements (asn, org, poc, or net).\n";
-            }
+                print "$percentComplete% of the file has been processed.\n";
+                print "     It took $dT seconds to parse $dCounter elements (asn, org, poc, or net).\n";
+            } 
             
-            #Use XML::Simple to load each element into memory directly.
-            my %parsedXML = ();
-            $parsedXML{$xmlReader->name} = XMLin($xmlReader->readOuterXml(), ForceContent => 0, ForceArray => 0,  ContentKey => ELEMENT_TEXT);
-            
-            #Push the hash into the InsertManager object. 
-            $insertManager->addRowToBuffer(\%parsedXML);
+            $insertManager->parseXML($xmlReader->readOuterXml(), $xmlReader->name); 
 
             $xmlReader->next();
             $counter++;
@@ -153,7 +132,7 @@ sub dumpXMLToSQLDB {
             } if(($counter % 1000) == 0);
         }#END IF
     }#END WHILE
-    $insertManager->insertAndFlushBuffer;
+    $insertManager->endParsing; #perform some additional work (if needed)
 
     my $endTime = time;
     $deltaTime = $endTime - $startTime;
@@ -202,6 +181,31 @@ sub countLinesInFile {
 #### SCRAP #########
 #
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#   @param dbms => 'dbms'. The database management system to to connect to.
+#       (any database that is supported by Class::DBI).
+#   @param database => the database to connect to. The database must 
+#       exist before running this script.
+#   @param hostAddress => 'host address'. The ip of the host.
+#   @param port => 'port no.'. The port to connect to.
+#   @param username => 'username'.
+#   @param password => 'password'.
+
+#    my $dbms        = ($args{'dbms'}) ? $args{'dbms'} : die "You need to specify a dbms. pass in dbms => 'SQL server type' as a parameter.\n";
+#    my $database   = ($args{'database'}) ? $args{'database'} : die "You need to specify a database to use. pass in database => 'a database name' as a parameter.\n";
+#    my $hostAddress = ($args{'hostAddress'}) ? $args{'hostAddress'} : die "Please pass in the address of the database host. Use this syntax: hostaddress => 'ip address'.\n";
+#    my $port        = ($args{'port'}) ? $args{'port'} : do { 
+#        my $init = sub { 
+#            print "port => 'port no.' not specified. Defaulting to port => 3306\n" if ($verbose);
+#            return 3306;
+#        };
+#        $init->();
+#    };
+#    my $username    = ($args{'username'}) ? $args{'username'} : die "A username needs to be passed in. username => 'username' as a parameter.\n";
+#    my $password    = ($args{'password'}) ? $args{'password'} : do { 
+#        print "password => 'password' not specified. Assuming that no password is needed.\n" if ($verbose); 
+#    };
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
             #Now take that has and push it into the SQL database.   
             #Convert the multi-dimensional hash into a set of tables.
