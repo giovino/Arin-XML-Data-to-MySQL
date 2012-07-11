@@ -18,7 +18,7 @@ __PACKAGE__->load_components("InflateColumn::DateTime");
 #Adds em collumns. 
 __PACKAGE__->add_columns(
     'netHandle'         => {data_type => 'varchar',     size => 255,    is_nullable => 0},
-    'parentNetHandle'   => {data_type => 'varchar',     size => 255,    is_nullable => 0},
+    'parentNetHandle'   => {data_type => 'varchar',     size => 255,    is_nullable => 1},
     'orgHandle'         => {data_type => 'varchar',     size => 255,    is_nullable => 0}, 
     'ref'               => {data_type => 'varchar',     size => 511,    is_nullable => 1},
     'name'		=> {data_type => 'varchar',	size => 255,	is_nullable => 1},

@@ -15,22 +15,22 @@ use InsertManager::InsertManager;
 use Cwd;
 use Scalar::Util 'blessed';
 
+$XML::Simple::PREFERRED_PARSER = 'XML::LibXML::SAX'; #Makes XML::Simple Run faster
+
 #Right now the default key that XML::Simple usees for element text is #TEXT. 
 use constant {
     ELEMENT_TEXT => '#TEXT'
-#    ELEMENT_ATTRIBUTE => '#ATTR'
 };
 
 #my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_test.xml";
-#my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db.xml";
+my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db.xml";
 #my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_ASN.xml";
 #my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_POC.xml";
 #my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_ORG.xml";
-my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_NET.xml";
-print getcwd."\n";
+#my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_NET.xml";
 dumpXMLToSQLDB($xmlPath, dbms => 'mysql', database => 'BulkWhois', 
                 hostAddress => 'localhost', username => 'root', 
-                password => '12345', verbose => 0, debug => 1);
+                password => '12345', verbose => 1, debug => 0);
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Parses the specified .xml Arin dump file and places it in the 
@@ -39,9 +39,8 @@ dumpXMLToSQLDB($xmlPath, dbms => 'mysql', database => 'BulkWhois',
 #  dump file stores all of the inportant values in elements. The 
 #  end result will be a set of tables in 3nd normal form.
 #
-#   @param .xml file path relative to the perl script directory.
-#
-#       been created. If not then an error will be thrown.
+#   @param .xml file path relative to the perl script directory or an 
+#       absolute path.
 #   @param dbms => 'dbms'. The database management system to to connect to.
 #       (any database that is supported by Class::DBI).
 #   @param database => the database to connect to. The database must 
@@ -50,17 +49,10 @@ dumpXMLToSQLDB($xmlPath, dbms => 'mysql', database => 'BulkWhois',
 #   @param port => 'port no.'. The port to connect to.
 #   @param username => 'username'.
 #   @param password => 'password'.
-#   @param @optional dropTables => 'boolean value' 1 or 0 to drop the database tables
-#       before parsing the xml. This will default to 0. If 0 is set then the 
-#       function will only update the tables.
-#   @param @optional overwriteOld => 'boolean value' 1 or 0 to overwrite old entries 
-#       in the database when reading in an xml file or keep a history of updated
-#       entries.
 #   @param @optional verbose => 'boolean value' 1 or 0 to turn on or off verbal mode.
 #   @param @optional debug => 'boolean value' 1 or 0 to turn on or off debug mode.
 sub dumpXMLToSQLDB {
     my $thisFunction = (caller(0))[3];
-    print "Entered: $thisFunction\n";
 
     #Initialize variables.
     my $xmlPath     = shift;
@@ -98,7 +90,7 @@ sub dumpXMLToSQLDB {
     #@TODO I should probably have a more intelligent deploying scheme.
     $bulkWhoisSchema->deploy({add_drop_table => 1}); #Creates a database from the schema erase previouse db
     my $deployStatements = $bulkWhoisSchema->deployment_statements;
-    print "$deployStatements\n";
+    print "$deployStatements\n" if($debug);
 
     my $insertManager = InsertManager::InsertManager->new(bufferSize => 1000, schema => $bulkWhoisSchema);
     $insertManager->defaultElementTextKey(ELEMENT_TEXT); 
@@ -117,11 +109,11 @@ sub dumpXMLToSQLDB {
     #Count the number of lines in the file for a progress report.
     #Set the refresh rate afterwards. This will print an update of 
     #the reading progress for 400 times throughout the dumping.
-    print "Counting lines\n" if($debug);
-    my ($totalLines, $deltaTime) = (10000, 0);#($verbose) ? countLinesInFile($xmlPath) : 0;
-#    print Dumper $totalLines, $deltaTime;
+    print "Calculating lines\n" if($debug || $verbose);
+    my ($totalLines, $deltaTime) = ($verbose) ? countLinesInFile($xmlPath) : 0;
+    print "Finished calculating lines\n" if($debug || $verbose);
     my $counter = 0;
-    my $refreshRate = (($totalLines / 400) < 1) ? 1 : int($totalLines / 400);
+    my $refreshRate = (($totalLines / 10000) < 1) ? 1 : int($totalLines / 10000);
     print "Time to count lines: $deltaTime seconds\n" if($debug);
     print "Lines counted: $totalLines\n" if($debug);
     print "Refresh every $refreshRate lines parsed\n" if($debug); 
@@ -129,8 +121,8 @@ sub dumpXMLToSQLDB {
     #Loop through the contents of the .xml file. Store all of the elements into the 
     #database.
     print "Begin reading\n" if($debug); 
-    my $BUFFER_SIZE = 2000; #@TODO remove this variable once done debugging this script.
     my $startTime = time; #Start the stopwatch
+    my $sT = time;  #Used to tell you the time between a refresh.
     while($xmlReader->read()) {
         #Go through all of the child elements of the root node. Use XML::Simple
         # to convert them into a hash. Then go through the hash and push it into 
@@ -140,15 +132,16 @@ sub dumpXMLToSQLDB {
 
             #Print the progress to the screen.
             if(!($counter % $refreshRate) && $verbose) {
+                my $dT = time - $sT;
+                $sT = time;
                 my $percentComplete = int((($xmlReader->lineNumber()) / $totalLines) * 100);
-                print "$percentComplete% of the file has been processed\n";
+                print "$percentComplete% of the file has been processed.\n"
+                print "     It took $dT seconds to parse $counter elements (asn, org, poc, or net).\n";
             }
             
             #Use XML::Simple to load each element into memory directly.
             my %parsedXML = ();
             $parsedXML{$xmlReader->name} = XMLin($xmlReader->readOuterXml(), ForceContent => 0, ForceArray => 0,  ContentKey => ELEMENT_TEXT);
-            
-#            print Dumper \%parsedXML;
             
             #Push the hash into the InsertManager object. 
             $insertManager->addRowToBuffer(\%parsedXML);
@@ -156,8 +149,6 @@ sub dumpXMLToSQLDB {
             $xmlReader->next();
             $counter++;
             do{ 
-                #$insertManager->dumpBuffer;
-                #last;
                 print "Iteration: $counter\n" if($debug);
             } if(($counter % 1000) == 0);
         }#END IF

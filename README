@@ -5,6 +5,8 @@ REQUIRMENTS:
         -DBIx::Class::Schema has a 'deploy' feature.
         -XML::LibXML::Reader will need to be installed. (This isn't needed anymore, but I'm going to keep all of the installation requirements in the readme for future reference).
         -XML::Simple needs to be installed.
+        -XML::LibXML::SAX or XML::SAX   # Useing these two modules with XML::Simple
+        -XML::SAX::ParserFactory        # makes things run faster
 
 INSTALLATION:
 -Ubuntu 12.04 LTS
