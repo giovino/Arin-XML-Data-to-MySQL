@@ -3,14 +3,14 @@
 # a temporary  MySQL database. Once the database has been created 
 # the script performs a second pass through and creates a permanent
 # MySQL database in 3rd normal form (or at least makes it's best 
-# attempt"
-
+# attempt)
+#
 use strict;
 use warnings;
 use Data::Dumper;
 use XML::LibXML::Reader; #Read the file without using too much memory
 use BulkWhois::Schema;
-use InsertManager::InsertManager;
+use InsertManager::XMLSimpleInsertManager;
 use Cwd;
 use Scalar::Util 'blessed';
 
@@ -41,7 +41,7 @@ my $dsn = "dbi:$dbms:$database:$hostAddress:$port";
 my $bulkWhoisSchema = BulkWhois::Schema->connect($dsn, $username, $password);
 $bulkWhoisSchema->deploy({add_drop_table => 1}); #Start from fresh
 #my $deployStatements = $bulkWhoisSchema->deployment_statements;
-my $insertManager = InsertManager::InsertManager->new(bufferSize => 1000, schema => $bulkWhoisSchema);
+my $insertManager = InsertManager::XMLSimpleInsertManager->new(bufferSize => 1000, schema => $bulkWhoisSchema);
 $insertManager->defaultElementTextKey(ELEMENT_TEXT); 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -51,7 +51,7 @@ dumpXMLToSQLDB($xmlPath,
                 hostAddress => $hostAddress, port => $port, 
                 username => $username, password => $password,
                 insertManager => $insertManager,
-                verbose => 1, debug => 0
+                verbose => 0, debug => 0
 );
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
