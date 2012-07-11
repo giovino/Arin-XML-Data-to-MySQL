@@ -102,35 +102,15 @@ sub addRowToBuffer {
         if($key =~ m/asn/i) {
             
             $self->{BUFFER}->pushToBuffer('Asns', $self->simpleHashForRowHash($value, 'Asns', 'asn'));
-            
-#            if(@{$self->{BUFFER}->{'Asns'}} == $self->{BUFFER_SIZE}) {
-#                $self->insertAndFlushBuffer('Asns');
-#                $self->insertAndFlushBuffer('Asns_Pocs');
-#            }
         }
         elsif($key =~ m/poc/i) { 
             $self->{BUFFER}->pushToBuffer('Pocs', $self->simpleHashForRowHash($value, 'Pocs', 'poc'));
-#            if(@{$self->{BUFFER}->{'Pocs'}} == $self->{BUFFER_SIZE}) {
-#                $self->insertAndFlushBuffer('Pocs');
-#                $self->insertAndFlushBuffer('Pocs_Emails');
-#                $self->insertAndFlushBuffer('Pocs_Phones');
-#            }
         }
         elsif($key =~ m/org/i) { 
             $self->{BUFFER}->pushToBuffer('Orgs', $self->simpleHashForRowHash($value, 'Orgs', 'org'));
-#            if(@{$self->{BUFFER}->{'Orgs'}} == $self->{BUFFER_SIZE}) {
-#                $self->insertAndFlushBuffer('Orgs');
-#                $self->insertAndFlushBuffer('Orgs_Pocs');
-#            }
         }
         elsif($key =~ m/net/i) { 
             $self->{BUFFER}->pushToBuffer('Nets', $self->simpleHashForRowHash($value, 'Nets', 'net'));
-#            if(@{$self->{BUFFER}->{'Nets'}} == $self->{BUFFER_SIZE}) {
-#                $self->insertAndFlushBuffer('Nets');
-#                $self->insertAndFlushBuffer('Nets_Pocs');
-#                $self->insertAndFlushBuffer('NetBlocks');
-#                $self->insertAndFlushBuffer('OriginASes');
-#            }
         }
         else {
             $self->insertAndFlushBuffer;

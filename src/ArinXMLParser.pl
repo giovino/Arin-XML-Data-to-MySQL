@@ -39,9 +39,11 @@ my $hostAddress = 'localhost';
 my $port = 3306;
 my $dsn = "dbi:$dbms:$database:$hostAddress:$port";
 my $bulkWhoisSchema = BulkWhois::Schema->connect($dsn, $username, $password);
-$bulkWhoisSchema->deploy({add_drop_table => 1}); #Start from fresh
+#TODO uncomment the bulkWhoisSchema once I finish constructing the SAXInsertManager
+#$bulkWhoisSchema->deploy({add_drop_table => 1}); #Drop all of the tables from the database and recreate them
 #my $deployStatements = $bulkWhoisSchema->deployment_statements;
-my $insertManager = InsertManager::XMLSimpleInsertManager->new(bufferSize => 1000, schema => $bulkWhoisSchema);
+#my $insertManager = InsertManager::XMLSimpleInsertManager->new(bufferSize => 65535, schema => $bulkWhoisSchema);
+my $insertManager = InsertManager::SAXInsertManager->new(buffer => 65535, schema => $bulkWhoisSchema);
 $insertManager->defaultElementTextKey(ELEMENT_TEXT); 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
