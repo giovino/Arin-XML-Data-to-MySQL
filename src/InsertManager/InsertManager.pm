@@ -18,6 +18,7 @@ use InsertManager::Mappings;    #qw($TABLES $ELEMENTS_THAT_NEED_EXTRA_PARSING
 use Scalar::Util 'blessed';
 use JSON;
 use Switch;
+use Socket; #inet_pton function to convert text ipv4 and ipv6 to binary form
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Create a new InsertManager. 
@@ -84,7 +85,24 @@ sub addRowToBuffer {
             if(@{$self->{BUFFER}->{'Pocs'}} == $self->{BUFFER_SIZE}) {
                 $self->insertAndFlushBuffer('Pocs');
                 $self->insertAndFlushBuffer('Pocs_Emails');
-                }
+                $self->insertAndFlushBuffer('Pocs_Phones');
+            }
+        }
+        elsif($key =~ m/org/i) { 
+            push @{$self->{BUFFER}->{'Orgs'}}, $self->simpleHashForRowHash($value, 'Orgs', 'org');
+            if(@{$self->{BUFFER}->{'Orgs'}} == $self->{BUFFER_SIZE}) {
+                $self->insertAndFlushBuffer('Orgs');
+                $self->insertAndFlushBuffer('Orgs_Pocs');
+            }
+        }
+        elsif($key =~ m/net/i) { 
+            push @{$self->{BUFFER}->{'Nets'}}, $self->simpleHashForRowHash($value, 'Nets', 'net');
+            if(@{$self->{BUFFER}->{'Nets'}} == $self->{BUFFER_SIZE}) {
+                $self->insertAndFlushBuffer('Nets');
+                $self->insertAndFlushBuffer('Nets_Pocs');
+                $self->insertAndFlushBuffer('NetBlocks');
+                $self->insertAndFlushBuffer('OriginASes');
+            }
         }
         else {
             $self->insertAndFlushBuffer;
@@ -115,7 +133,7 @@ sub simpleHashForRowHash {
     my $rowToPush = shift;
     my $table = shift;
     my $element = shift;
-    
+
     my %tmpHash = ();
     #parse all of the simple elements in the hash.
     foreach(@{$TABLES->{$table}}) {
@@ -273,7 +291,7 @@ sub addPhones {
         return;
     }
     elsif(ref($phones->{'phone'}) =~ m/ARRAY/) {
-        #my @hashArray = ();
+        my @hashArray = ();
         #print Dumper $phones->{'phone'};
         foreach(@{$phones->{'phone'}}) {  
             my $handle = $_->{'number'}->{'pocHandle'};
@@ -282,7 +300,16 @@ sub addPhones {
                 print "the handle $handle in the phone element\n";
                 exit;
             }
+
+            my $tmpHash = {
+                $TABLES->{$tableToUpdate}->[0] => $parentHandle, 
+                $TABLES->{$tableToUpdate}->[1] => $_->{'number'}->{'phoneNumber'},
+                $TABLES->{$tableToUpdate}->[2] => $_->{'type'}->{'description'}
+            };
+            push @hashArray, $tmpHash;
         }
+        push $self->{BUFFER}->{$tableToUpdate}, @hashArray;
+        return;
     }
     elsif(ref($phones->{'phone'}) =~ m/HASH/) { 
         my $handle = $phones->{'phone'}->{'number'}->{'pocHandle'};
@@ -291,6 +318,14 @@ sub addPhones {
             print "the handle $handle in the phone element\n";
             exit;
         }
+        
+        my $tmpHash = {
+            $TABLES->{$tableToUpdate}->[0] => $parentHandle, 
+            $TABLES->{$tableToUpdate}->[1] => $phones->{'phone'}->{'number'}->{'phoneNumber'},
+            $TABLES->{$tableToUpdate}->[2] => $phones->{'phone'}->{'type'}->{'description'}
+        };
+       push $self->{BUFFER}->{$tableToUpdate}, $tmpHash;
+       return;
     }
     else { 
         print "Unexpected value when received an email element to parse.\n";
@@ -360,6 +395,89 @@ sub addPocLinks {
         return 0;
     }
 }#END addPocLinks
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# addNetBlock takes a netBlocks XMLin element to hash and 
+# formats it such that it can be passed into the method
+# simpleHashForRowHash. The outputted value is then pushed 
+# into the buffer
+#
+#   @param the table to store the netblock in.
+#   @param the handle the netblock belongs to.
+#   @param the set of netblocks to process.
+sub addNetBlock {    
+    my $self = shift; 
+    my $tableToUpdate = shift;
+    my $parentHandle = shift;
+    my $netBlocks = shift;
+
+    if(!defined($netBlocks->{'netBlock'})) {
+        print "There are no netblocks assigned to this net\n";
+    }
+    elsif(ref($netBlocks->{'netBlock'}) =~ m/HASH/) {
+        $netBlocks->{'netBlock'}->{$TABLES->{$tableToUpdate}->[0]} = $parentHandle; #assume the first col will store the parent handle 
+        push $self->{BUFFER}->{$tableToUpdate}, 
+                $self->simpleHashForRowHash($netBlocks->{'netBlock'}, 
+                                            'NetBlocks', 'netBlock'); 
+    }
+    elsif(ref($netBlocks->{'netBlock'}) =~ m/ARRAY/) {
+        my @hashArray = ();
+        foreach(@{$netBlocks->{'netBlock'}}) {
+            $_->{$TABLES->{$tableToUpdate}->[0]} = $parentHandle; #assume the first col will store the parent handle 
+            push @hashArray, $self->simpleHashForRowHash($_, 'NetBlocks', 'netBlock');
+        }
+        push $self->{BUFFER}->{$tableToUpdate}, @hashArray; #later collapse into a single push
+    }
+    else {
+        print "addNetBlock has encountered an unexpected value.\n";
+        print "Dumping to screen:\n";
+        print "Table to update: $tableToUpdate\n";
+        print "Parent handle: $parentHandle\n";
+        print Dumper $netBlocks;
+    }    
+}#END addNetBlock
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# addNetBlock takes a netBlocks XMLin element to hash and 
+# formats it such that it can be passed into the method
+# simpleHashForRowHash. The outputted value is then pushed 
+# into the buffer
+#
+#   @param the table to store the OriginASes in.
+#   @param the handle the OriginASes belong to.
+#   @param the set of OriginASes to process.
+sub addOriginASes {    
+    my $self = shift; 
+    my $tableToUpdate = shift;
+    my $parentHandle = shift;
+    my $originASes = shift;
+    
+    if(!defined($originASes->{'originAS'})) {}
+    elsif(ref($originASes->{'originAS'}) eq '') {
+        my %tmpHash = ();
+        $tmpHash{$TABLES->{$tableToUpdate}->[0]} = $parentHandle;
+        $tmpHash{$TABLES->{$tableToUpdate}->[1]} = $originASes->{'originAS'};
+
+        push $self->{BUFFER}->{$tableToUpdate}, \%tmpHash;
+    }
+    elsif(ref($originASes->{'originAS'}) =~ m/ARRAY/) {
+        foreach(@{$originASes->{'originAS'}}) {    
+            my %tmpHash = ();
+            $tmpHash{$TABLES->{$tableToUpdate}->[0]} = $parentHandle;
+            $tmpHash{$TABLES->{$tableToUpdate}->[1]} = $_;
+
+            push $self->{BUFFER}->{$tableToUpdate}, \%tmpHash;
+        } 
+    }
+    else {
+        print "addOriginAS has encountered an unexpected value.\n";
+        print "Dumping to screen:\n";
+        print "Table to update: $tableToUpdate\n";
+        print "Parent handle: $parentHandle\n";
+        print "Type: ". ref($originASes->{'originAS'}) ."\n";
+        print Dumper $originASes;
+    }   
+}#END OriginASes
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Converts an address to a string so that it may be added 
@@ -462,12 +580,60 @@ sub parsingFunctionChooser {
                 case 'phones' {
                     $self->addPhones('Pocs_Phones', $rowToPush->{'handle'},
                                     $rowToPush->{$subElementToParse});
-                    print "Add phones to a table\n";
                 }
                 else {
                     print "Unexpected element $subElementToParse for $elementToParse\n";
                     exit;
                 }
+            }
+        }
+        case 'org' {
+            switch ($subElementToParse) {
+                case 'streetAddress' {
+                    $result = $self->addressToString($rowToPush->{$subElementToParse});
+                }
+                case 'customer' { 
+                    my $customer = $rowToPush->{$subElementToParse};
+                    $result = ($customer =~ m/Y/) ? 1 : 0;
+                }
+                case 'iso3166-1' {
+                    my $iso3166_1 = $rowToPush->{$subElementToParse};
+                    $result = encode_json $iso3166_1;
+                }
+                case 'pocLinks' {
+                    $result = $self->addPocLinks('Orgs_Pocs', $rowToPush->{'handle'}, 
+                                            $rowToPush->{$subElementToParse}
+                                            );
+                }
+                else {
+                    print "Unexpected element $subElementToParse for $elementToParse\n";
+                    exit;
+                }    
+            }
+        }
+        case 'net' {
+            switch ($subElementToParse) {
+                case 'comment' { 
+                    $result = $self->commentToString($rowToPush->{$subElementToParse});    
+                }
+                case 'originASes' { 
+                   $self->addOriginASes('OriginASes', $rowToPush->{'handle'}, 
+                                        $rowToPush->{'originASes'});
+                }
+                case 'pocLinks' { 
+                    $result = $self->addPocLinks('Nets_Pocs', $rowToPush->{'handle'}, 
+                                            $rowToPush->{$subElementToParse}
+                                            );
+                }
+                case 'netBlocks' {
+                    $self->addNetBlock('NetBlocks', $rowToPush->{'handle'},
+                                        $rowToPush->{'netBlocks'}
+                                    );    
+                }
+                else {
+                    print "Unexpected element $subElementToParse for $elementToParse\n";
+                    exit;
+                }    
             }
         }
         else {
@@ -500,7 +666,13 @@ sub defaultElementTextKey {
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 sub dumpBuffer {
     my $self = shift;
-    print Dumper $self->{BUFFER};
+    my $subBuffToDump = shift;
+    if(!$subBuffToDump) {
+        print Dumper $self->{BUFFER};
+    }
+    else {
+        print Dumper $self->{BUFFER}->{$subBuffToDump};
+    }
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -18,14 +18,15 @@ __PACKAGE__->load_components("InflateColumn::DateTime");
 #Adds em collumns. 
 __PACKAGE__->add_columns(
     'netHandle'         => {data_type => 'varchar',     size => 255,    is_nullable => 0},
-    'registrationDate'  => {data_type => 'datetime',    is_nullable => 1},
+    'parentNetHandle'   => {data_type => 'varchar',     size => 255,    is_nullable => 0},
+    'orgHandle'         => {data_type => 'varchar',     size => 255,    is_nullable => 0}, 
     'ref'               => {data_type => 'varchar',     size => 511,    is_nullable => 1},
-    'endAddress'        => {data_type => 'varchar',     size => 127,    is_nullable => 1},
     'name'		=> {data_type => 'varchar',	size => 255,	is_nullable => 1},
-    'nameservers'	=> {data_type => 'varchar',	size => 1023,	is_nullable => 1},
+    'ipVersion'		=> {data_type => 'int',		                is_nullable => 1},
     'startAddress'	=> {data_type => 'varchar',	size => 127,	is_nullable => 1},
-    'updateDate'        => {data_type => 'datetime',    is_nullable => 1},
-    'ipVersion'		=> {data_type => 'int',		is_nullable => 1},
+    'endAddress'        => {data_type => 'varchar',     size => 127,    is_nullable => 1},
+    'registrationDate'  => {data_type => 'datetime',                    is_nullable => 1},
+    'updateDate'        => {data_type => 'datetime',                    is_nullable => 1},
     'comments'		=> {data_type => 'varchar',	size => 4097,	is_nullable => 1}
 );
 

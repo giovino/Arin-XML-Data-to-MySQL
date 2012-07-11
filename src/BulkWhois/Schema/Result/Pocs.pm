@@ -22,17 +22,17 @@ __PACKAGE__->add_columns(
     'pocHandle'         => {data_type => 'varchar',     size => 255,    is_nullable => 0},
     'ref'               => {data_type => 'varchar',     size => 511,    is_nullable => 1},
     'city'	        => {data_type => 'varchar',     size => 255,    is_nullable => 1},
-    'registrationDate'  => {data_type => 'datetime',    is_nullable => 1},
+    'registrationDate'  => {data_type => 'datetime',                    is_nullable => 1},
     'companyName'  	=> {data_type => 'varchar',     size => 511,    is_nullable => 1},
     'firstName'		=> {data_type => 'varchar',	size => 255,	is_nullable => 1},
     'middleName'	=> {data_type => 'varchar',	size => 255,	is_nullable => 1},
     'lastName'		=> {data_type => 'varchar',	size => 255,	is_nullable => 1},
     'postalCode'	=> {data_type => 'varchar',	size => 255,	is_nullable => 1},
     'iso3166_2'		=> {data_type => 'varchar',	size => 23,	is_nullable => 1},
-    'updateDate'        => {data_type => 'datetime',    is_nullable => 1},
+    'updateDate'        => {data_type => 'datetime',                    is_nullable => 1},
     'address'   	=> {data_type => 'varchar',	size => 1023,   is_nullable => 1},
     'iso3166_1'		=> {data_type => 'varchar',	size => 511,	is_nullable => 1},
-    'isRoleAccount'     => {data_type => 'boolean',     is_nullable => 0}
+    'isRoleAccount'     => {data_type => 'boolean',                     is_nullable => 0}
 );
 
 #Now set the primary key. This function will take in an array of pk's.
