@@ -54,7 +54,7 @@ dumpXMLToSQLDB($xmlPath,
                 hostAddress => $hostAddress, port => $port, 
                 username => $username, password => $password,
                 insertManager => $insertManager,
-                verbose => 0, debug => 0
+                verbose => 1, debug => 0
 );
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
