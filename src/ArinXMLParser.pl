@@ -11,6 +11,7 @@ use Data::Dumper;
 use XML::LibXML::Reader; #Read the file without using too much memory
 use BulkWhois::Schema;
 use InsertManager::XMLSimpleInsertManager;
+use InsertManager::SAXInsertManager;
 use Cwd;
 use Scalar::Util 'blessed';
 
@@ -40,11 +41,11 @@ my $port = 3306;
 my $dsn = "dbi:$dbms:$database:$hostAddress:$port";
 my $bulkWhoisSchema = BulkWhois::Schema->connect($dsn, $username, $password);
 #TODO uncomment the bulkWhoisSchema once I finish constructing the SAXInsertManager
-#$bulkWhoisSchema->deploy({add_drop_table => 1}); #Drop all of the tables from the database and recreate them
+$bulkWhoisSchema->deploy({add_drop_table => 1}); #Drop all of the tables from the database and recreate them
 #my $deployStatements = $bulkWhoisSchema->deployment_statements;
-#my $insertManager = InsertManager::XMLSimpleInsertManager->new(bufferSize => 65535, schema => $bulkWhoisSchema);
-my $insertManager = InsertManager::SAXInsertManager->new(buffer => 65535, schema => $bulkWhoisSchema);
-$insertManager->defaultElementTextKey(ELEMENT_TEXT); 
+my $insertManager = InsertManager::XMLSimpleInsertManager->new(bufferSize => 65535, schema => $bulkWhoisSchema);
+#my $insertManager = InsertManager::SAXInsertManager->new(buffer => 65535, schema => $bulkWhoisSchema);
+$insertManager->defaultElementTextKey(ELEMENT_TEXT); #TODO do not forget to uncomment
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #begin parsing and dumping to database

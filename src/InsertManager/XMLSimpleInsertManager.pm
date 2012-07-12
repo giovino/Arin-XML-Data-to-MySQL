@@ -31,9 +31,6 @@ $XML::Simple::PREFERRED_PARSER = 'XML::LibXML::SAX'; #Makes XML::Simple Run fast
 #   @param schema => $schemaObject. A refernce to the
 #       DBIx::Class::Schema object. This will be used 
 #       to perform the inserts on.
-#   @TODO @param overwrite => 1 || 0. Pass in 1 to overwite
-#       if the handle matches. Otherwise add new row if
-#       the update dates do not match.
 sub new {
     #Get the argumensts
     my $class = shift;

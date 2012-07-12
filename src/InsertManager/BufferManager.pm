@@ -1,7 +1,10 @@
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # This class manages a buffer to use with DBIx. Hopefully performing 
 # bulk inserts will reduce the time to parse a huge XML file.
-# 
+#
+# @TODO Enable the ability to set buffers for individual tables (I'll probably
+#  allow the setting of a boolean variable that will make use of a hash in 
+#  Mappings.pm
 package InsertManager::BufferManager;
 use base qw/InsertManager::InsertManagerInterface/;
 use InsertManager::Mappings;
