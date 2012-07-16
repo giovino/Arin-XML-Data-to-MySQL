@@ -26,5 +26,9 @@ OTHER TOOLS:
     Another usefull tool is dbicdump.pl. This script takes an existing database and dumps it into it into a set of modules that inherit from DBIx::Class::Schema and DBIx::Class::Core. This is the command I used on my test database. 
     -perl dbicdump.pl -o dump_directory=oldbulkwhoisdump -o components='["InflateColumn::DateTime"]' MyApp::Schema dbi:mysql:arin root 12345
    
+TODO:
+    1) Convert ArinXMLParser to an executable script with arguments.
+    2) See if project can be added into the Arin project community.
+    3) Update documentation to POD
 
 EXECUTION:
