@@ -1,3 +1,4 @@
+#!/usr/bin/perl
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # This perl script reads an xml file and purges the contents into
 # a temporary  MySQL database. Once the database has been created 
@@ -5,6 +6,19 @@
 # MySQL database in 3rd normal form (or at least makes it's best 
 # attempt)
 #
+# TODO Add command line arguments to the application.
+#   -v, --verbose   : same as debugging.
+#   -f, --file      : the xml file to parse and insert into the database.
+#   -m, --dbms      : the database management system to connect to.
+#   -d, --database  : the databse to connect to.
+#   -u, --user      : the username to connect as.
+#   -p, --password  : the password of the user. passing in p will prompt for a password.
+#   -h, --host      : the address of the dbms host.
+#   -g, --port      : the port to connect to. Why use -g instead of -H? Because Getopt is case insensitive. '-g' stands for gate.
+#   --help          : print usage information to the screen.
+# TODO Convert ArinXMLParser to an executable script.
+# TODO Convert the documentation to pad for all of the scripts
+
 use strict;
 use warnings;
 use Data::Dumper;
@@ -14,87 +28,102 @@ use InsertManager::XMLSimpleInsertManager;
 use InsertManager::SAXInsertManager;
 use Cwd;
 use Scalar::Util 'blessed';
+use Getopt::Long; #Used for processing arguments.
 
 #Right now the default key that XML::Simple usees for element text is #TEXT. 
 use constant {
     ELEMENT_TEXT => '#TEXT'
 };
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~ GET ARGUMENTS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#Hash to store all of the arguments.
+my $args = {
+    'verbose'   => '',
+    'file'      => '',
+    'dbms'      => '',
+    'database'  => '',
+    'user'      => '',
+    'password'  => '',
+    'host'      => '',
+    'port'      => '',
+    'help'      => ''
+};
+GetOptions( 'v|verbose=i'   => \$args->{'verbose'},      #accept only integer 
+            'f|file=s'      => \$args->{'file'},        #accept only string
+            'm|dbms=s'      => \$args->{'dbms'},
+            'd|database=s'  => \$args->{'database'},
+            'u|user=s'      => \$args->{'user'},
+            'p|password=s'  => \$args->{'password'},
+            'h|host=s'      => \$args->{'host'},
+            'g|port=i'      => \$args->{'port'},
+            'help|?'        => \$args->{'help'}           #Treat as trigger only
+        );
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+print Dumper $args;
 
+#If the 'help' variable has been set then display usage information
+#Otherwise begin parsing the document
+if($args->{'help'}) {
+    #Print usage information
+}
+else {
+    #Create a BulkWhois::Schema object (which inherits from DBIx::Class::Schema).
+    my $dsn = "dbi:$args->{'dbms'}:$args->{'database'}:$args->{'host'}:$args->{'port'}";
+    my $bulkWhoisSchema = BulkWhois::Schema->connect($dsn, $args->{'user'}, $args->{'password'});
+    
+    $bulkWhoisSchema->deploy({add_drop_table => 1}); #Drop all of the tables from the database and recreate them
 
-#my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_test.xml";
-my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db.xml";
-#my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_ASN.xml";
-#my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_POC.xml";
-#my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_ORG.xml";
-#my $xmlPath = "/home/crmckay/Desktop/arin_db/arin_db_NET.xml";
+    #Set up the insertManager
+    my $insertManager = InsertManager::XMLSimpleInsertManager->new(bufferSize => 65535, schema => $bulkWhoisSchema);
+    $insertManager->defaultElementTextKey(ELEMENT_TEXT);
 
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#Connect and set up the InsertManager.
-my $dbms = 'mysql';
-my $database = 'BulkWhois';
-my $username = 'root';
-my $password = '12345';
-my $hostAddress = 'localhost';
-my $port = 3306;
-my $dsn = "dbi:$dbms:$database:$hostAddress:$port";
-my $bulkWhoisSchema = BulkWhois::Schema->connect($dsn, $username, $password);
-#TODO uncomment the bulkWhoisSchema once I finish constructing the SAXInsertManager
-$bulkWhoisSchema->deploy({add_drop_table => 1}); #Drop all of the tables from the database and recreate them
-#my $deployStatements = $bulkWhoisSchema->deployment_statements;
-my $insertManager = InsertManager::XMLSimpleInsertManager->new(bufferSize => 65535, schema => $bulkWhoisSchema);
-#my $insertManager = InsertManager::SAXInsertManager->new(buffer => 65535, schema => $bulkWhoisSchema);
-$insertManager->defaultElementTextKey(ELEMENT_TEXT); #TODO do not forget to uncomment
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-#begin parsing and dumping to database
-dumpXMLToSQLDB($xmlPath, 
-                dbms => $dbms, database => $database,
-                hostAddress => $hostAddress, port => $port, 
-                username => $username, password => $password,
-                insertManager => $insertManager,
-                verbose => 1, debug => 0
-);
+    #begin parsing and dumping to database
+#    dumpXMLToSQLDB(
+#                    file => $args->{'file'}, 
+#                    insertManager => $insertManager,
+#                    verbose => 1, debug => 0
+#    );
+}
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Parses the specified .xml Arin dump file and places it in the 
-#  user defined SQL database. For now this function will silently 
-#  ignore the attributes for all of the elements since the Arin
-#  dump file stores all of the inportant values in elements. The 
-#  end result will be a set of tables in 3nd normal form.
+# The feedFileToInsertManager reads a bulkwhois file and loops
+#  through all of the child elements of the <bulkwhois> element. 
+#  For each child element it encounters will be extracted and passed
+#  the InsertManager object. The object then takes the xml, parses 
+#  it, and pushes it into a database.
 #
-#   @param .xml file path relative to the perl script directory or an 
-#       absolute path.
+#  This function expects all of its parameters
+#  to be passed in as key => value pairs
+#   @param file => the file to parse and dump to the database.
 #   @param insertManager => an object that implements the InsertManagerInterface
 #   @param @optional verbose => 'boolean value' 1 or 0 to turn on or off verbal mode.
 #   @param @optional debug => 'boolean value' 1 or 0 to turn on or off debug mode.
 sub dumpXMLToSQLDB {
-    my $thisFunction = (caller(0))[3];
+    my $thisFunction = (caller(0))[3]; #get the name of this function.
 
     #Initialize variables.
-    my $xmlPath     = shift;
     my %args        = @_;
     my $debug       = ($args{'debug'}) ? $args{'debug'} : 0;
     my $verbose     = ($args{'verbose'}) ? $args{'verbose'} : 0;
     my $insertManager   = ($args{'insertManager'}) ? $args{'insertManager'} : die "I need an object that implements the InsertManagerInterface. insertManager => an object.\n";
+    my $file    = ($args{'file'}) ? $args{'file'} : die "I need a file to parse.\n";
     print "Done getting args\n" if($debug);
 
     #Make sure the file path is valid. If it is then initialize an XML::LibXML::Reader 
     # object.
     print "Checking the file's path\n" if($debug);
-    my $xmlReader = (fileExists($xmlPath)) 
+    my $xmlReader = (fileExists($file)) 
                     ? XML::LibXML::Reader->new(
-                                    'location' => $xmlPath, 
+                                    'location' => $file, 
                                     'load_ext_dtd' => 0
                                     )
-                    : die $xmlPath . " is an invalid path\n";
+                    : die $file . " is an invalid path\n";
 
     #Count the number of lines in the file for a progress report.
     #Set the refresh rate afterwards. This will print an update of 
     #the reading progress for 400 times throughout the dumping.
     print "Calculating lines\n" if($debug || $verbose);
-    my ($totalLines, $deltaTime) = ($verbose) ? countLinesInFile($xmlPath) : 0;
+    my ($totalLines, $deltaTime) = ($verbose) ? countLinesInFile($file) : 0;
     print "Finished calculating lines\n" if($debug || $verbose);
     my $counter = 0;
     my $refreshRate = (($totalLines / 10000) < 1) ? 1 : int($totalLines / 10000);
@@ -139,10 +168,7 @@ sub dumpXMLToSQLDB {
 
     my $endTime = time;
     $deltaTime = $endTime - $startTime;
-    print "$deltaTime seconds was required to parse the XML file\n" if($verbose || $debug);
-    
-    #@TODO Get the stopping time.
-    # Print the total time to the screen. 
+    print "$deltaTime seconds was required to parse the XML file\n" if($verbose || $debug);    
 }
 
 
@@ -181,70 +207,6 @@ sub countLinesInFile {
     return ($totalLines, $deltaTime);
 }
 
-#### SCRAP #########
-#
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#   @param dbms => 'dbms'. The database management system to to connect to.
-#       (any database that is supported by Class::DBI).
-#   @param database => the database to connect to. The database must 
-#       exist before running this script.
-#   @param hostAddress => 'host address'. The ip of the host.
-#   @param port => 'port no.'. The port to connect to.
-#   @param username => 'username'.
-#   @param password => 'password'.
-
-#    my $dbms        = ($args{'dbms'}) ? $args{'dbms'} : die "You need to specify a dbms. pass in dbms => 'SQL server type' as a parameter.\n";
-#    my $database   = ($args{'database'}) ? $args{'database'} : die "You need to specify a database to use. pass in database => 'a database name' as a parameter.\n";
-#    my $hostAddress = ($args{'hostAddress'}) ? $args{'hostAddress'} : die "Please pass in the address of the database host. Use this syntax: hostaddress => 'ip address'.\n";
-#    my $port        = ($args{'port'}) ? $args{'port'} : do { 
-#        my $init = sub { 
-#            print "port => 'port no.' not specified. Defaulting to port => 3306\n" if ($verbose);
-#            return 3306;
-#        };
-#        $init->();
-#    };
-#    my $username    = ($args{'username'}) ? $args{'username'} : die "A username needs to be passed in. username => 'username' as a parameter.\n";
-#    my $password    = ($args{'password'}) ? $args{'password'} : do { 
-#        print "password => 'password' not specified. Assuming that no password is needed.\n" if ($verbose); 
-#    };
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-            #Now take that has and push it into the SQL database.   
-            #Convert the multi-dimensional hash into a set of tables.
-            #@TODO call the appropriate functions to initialize the DBIx::Class
-            # obejects based on the XMLin hash.
-            #if($counter == 0) { 
-            #    my $tmpArray = [qw/asnHandle ref startAsNumber endAsNumber name registrationDate updateTime/];
-            #    push(@insertBuffer, $tmpArray);
-            #}
-            #elsif($xmlReader->name eq "asn") {
-            #    my $tmpArray = [
-            #        $parsedXML{'asn'}->{'handle'},
-            #        $parsedXML{'asn'}->{'ref'},
-            #        $parsedXML{'asn'}->{'startAsNumber'},
-            #        $parsedXML{'asn'}->{'endAsNumber'},
-            #        $parsedXML{'asn'}->{'name'},
-            #        $parsedXML{'asn'}->{'registrationDate'},
-            #        $parsedXML{'asn'}->{'updateDate'}
-            #    ];
-                #{
-                #    asnHandle => $parsedXML{'asn'}->{'handle'},
-                #    ref => $parsedXML{'asn'}->{'ref'},
-                #    startAsNumber => $parsedXML{'asn'}->{'startAsNumber'},
-                #    endAsNumber => $parsedXML{'asn'}->{'endAsNumber'},
-                #    name => $parsedXML{'asn'}->{'name'},
-                #    registrationDate => $parsedXML{'asn'}->{'registrationDate'},
-                #    updateTime => $parsedXML{'asn'}->{'updateDate'}
-                #};
-            #    push(@insertBuffer, $tmpArray);
-            #}
-
-            #if(@insertBuffer == $BUFFER_SIZE) {
-            #    my $rowsToInsert = $bulkWhoisSchema->resultset('Asns')->populate(
-            #        \@insertBuffer
-            #    );
-            #    print "Completed population\n";
-            #}
 
 
