@@ -38,7 +38,7 @@ use constant {
 #~~~~~~~~~~~~~~~~~~~~~~~~~~ GET ARGUMENTS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #Hash to store all of the arguments.
 my $args = {
-    'verbose'   => '',
+    'verbose'   => 0,
     'file'      => '',
     'dbms'      => '',
     'database'  => '',
@@ -46,7 +46,8 @@ my $args = {
     'password'  => '',
     'host'      => '',
     'port'      => '',
-    'help'      => ''
+    'help'      => '',
+    'buffer-size'   => ''
 };
 GetOptions( 'v|verbose=i'   => \$args->{'verbose'},      #accept only integer 
             'f|file=s'      => \$args->{'file'},        #accept only string
@@ -56,10 +57,10 @@ GetOptions( 'v|verbose=i'   => \$args->{'verbose'},      #accept only integer
             'p|password=s'  => \$args->{'password'},
             'h|host=s'      => \$args->{'host'},
             'g|port=i'      => \$args->{'port'},
-            'help|?'        => \$args->{'help'}           #Treat as trigger only
+            'help|?'        => \$args->{'help'},           #Treat as trigger only
+            'buffer-size=i'   => \$args->{'buffer-size'}
         );
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-print Dumper $args;
 
 #If the 'help' variable has been set then display usage information
 #Otherwise begin parsing the document
@@ -69,20 +70,39 @@ if($args->{'help'}) {
 else {
     #Create a BulkWhois::Schema object (which inherits from DBIx::Class::Schema).
     my $dsn = "dbi:$args->{'dbms'}:$args->{'database'}:$args->{'host'}:$args->{'port'}";
-    my $bulkWhoisSchema = BulkWhois::Schema->connect($dsn, $args->{'user'}, $args->{'password'});
+    my $bulkWhoisSchema = BulkWhois::Schema->connect(
+                            $dsn, 
+                            $args->{'user'}, 
+                            $args->{'password'}
+                        ) or die "Failed to connect to database", DBIx->errstr;
+    #Drop all of the tables from the database and recreate them
+    my $connResults = $bulkWhoisSchema->deploy({add_drop_table => 1});  
     
-    $bulkWhoisSchema->deploy({add_drop_table => 1}); #Drop all of the tables from the database and recreate them
+    dPrintln("Connecting to database. Displaying connection string:", $args->{'verbose'}, 1);
+
+    #    $connResults will always have a false value because the developers decided so.
+    #    http://lists.scsys.co.uk/pipermail/dbix-class/2009-June/007963.html 
+    #    The link above is a response to this issue.
+
+    #Verbose statements 
+    dPrintln("\t"       . $dsn, $args->{'verbose'}, 1);
+    dPrintln("\tUser: "   . $args->{'user'}, $args->{'verbose'}, 1);
+    dPrintln(($args->{'password'}) ? "\tPassword: yes" : "\tPassword: no", $args->{'verbose'}, 1); 
 
     #Set up the insertManager
-    my $insertManager = InsertManager::XMLSimpleInsertManager->new(bufferSize => 65535, schema => $bulkWhoisSchema);
+    my $bufferSize = ($args->{'buffer-size'}) ? $args->{'buffer-size'} : 4095;
+    dPrintln("Setting up an InsertManager object with a default buffer size of $bufferSize",
+                $args->{'verbose'}, 1);
+    my $insertManager = InsertManager::XMLSimpleInsertManager->new(bufferSize => $bufferSize, schema => $bulkWhoisSchema);
     $insertManager->defaultElementTextKey(ELEMENT_TEXT);
 
     #begin parsing and dumping to database
-#    dumpXMLToSQLDB(
-#                    file => $args->{'file'}, 
-#                    insertManager => $insertManager,
-#                    verbose => 1, debug => 0
-#    );
+    dPrintln("Begin feeding xml to InsertManager object", $args->{'verbose'}, 1);
+    feedFileToInsertManager(
+                    file => $args->{'file'}, 
+                    insertManager => $insertManager,
+                    verbose => $args->{'verbose'}
+    );
 }
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -98,8 +118,7 @@ else {
 #   @param insertManager => an object that implements the InsertManagerInterface
 #   @param @optional verbose => 'boolean value' 1 or 0 to turn on or off verbal mode.
 #   @param @optional debug => 'boolean value' 1 or 0 to turn on or off debug mode.
-sub dumpXMLToSQLDB {
-    my $thisFunction = (caller(0))[3]; #get the name of this function.
+sub feedFileToInsertManager {
 
     #Initialize variables.
     my %args        = @_;
@@ -107,11 +126,12 @@ sub dumpXMLToSQLDB {
     my $verbose     = ($args{'verbose'}) ? $args{'verbose'} : 0;
     my $insertManager   = ($args{'insertManager'}) ? $args{'insertManager'} : die "I need an object that implements the InsertManagerInterface. insertManager => an object.\n";
     my $file    = ($args{'file'}) ? $args{'file'} : die "I need a file to parse.\n";
-    print "Done getting args\n" if($debug);
+ 
+    dPrintln("Entered: ".(caller(0))[3], $verbose, 3); #get the name of this function.
 
     #Make sure the file path is valid. If it is then initialize an XML::LibXML::Reader 
     # object.
-    print "Checking the file's path\n" if($debug);
+    dPrintln("Checking the file's path", $verbose, 2);
     my $xmlReader = (fileExists($file)) 
                     ? XML::LibXML::Reader->new(
                                     'location' => $file, 
@@ -122,18 +142,18 @@ sub dumpXMLToSQLDB {
     #Count the number of lines in the file for a progress report.
     #Set the refresh rate afterwards. This will print an update of 
     #the reading progress for 400 times throughout the dumping.
-    print "Calculating lines\n" if($debug || $verbose);
-    my ($totalLines, $deltaTime) = ($verbose) ? countLinesInFile($file) : 0;
-    print "Finished calculating lines\n" if($debug || $verbose);
+    dPrintln("Calculating lines", $verbose, 1);
+    my ($totalLines, $deltaTime) = ($verbose >= 1) ? countLinesInFile($file) : 0;
+    dPrintln("Finished calculating lines", $verbose, 1);
     my $counter = 0;
     my $refreshRate = (($totalLines / 10000) < 1) ? 1 : int($totalLines / 10000);
-    print "Time to count lines: $deltaTime seconds\n" if($debug);
-    print "Lines counted: $totalLines\n" if($debug);
-    print "Refresh every $refreshRate lines parsed\n" if($debug); 
+    dPrintln("Time to count lines: $deltaTime seconds", $verbose, 2);
+    dPrintln("Lines counted: $totalLines\n", $verbose, 2);
+    dPrintln("Refresh every $refreshRate lines parsed", $verbose, 2);
 
     #Loop through the contents of the .xml file. Store all of the elements into the 
     #database.
-    print "Begin reading\n" if($debug); 
+    dPrintln("Let the feeding begin", $verbose, 1); 
     my $startTime = time; #Start the stopwatch
     my $sT = time;  #Used to tell you the time between a refresh.
     my $previousCounter = 0;
@@ -145,37 +165,38 @@ sub dumpXMLToSQLDB {
             ($xmlReader->nodeType() != XML_READER_TYPE_SIGNIFICANT_WHITESPACE)) {
 
             #Print the progress to the screen.
-            if(!($counter % $refreshRate) && $verbose) {
+            do{ 
+                dPrintln("Iteration: $counter\n", $verbose, 2);
+            } if(($counter % $refreshRate) == 0);
+            if(!($counter % $refreshRate) && ($verbose >= 1)) {
                 my $dT = time - $sT;
                 $sT = time;
                 my $dCounter = $counter - $previousCounter;
                 $previousCounter = $counter;
                 my $percentComplete = int((($xmlReader->lineNumber()) / $totalLines) * 100);
                 print "$percentComplete% of the file has been processed.\n";
-                print "     It took $dT seconds to parse $dCounter elements (asn, org, poc, or net).\n";
+                print "\tIt took $dT seconds to parse $dCounter elements (asn, org, poc, or net).\n";
+                print "\t". ($totalLines - $xmlReader->lineNumber) ." lines left to parse.\n";
             } 
             
             $insertManager->parseXML($xmlReader->readOuterXml(), $xmlReader->name); 
 
             $xmlReader->next();
             $counter++;
-            do{ 
-                print "Iteration: $counter\n" if($debug);
-            } if(($counter % 1000) == 0);
         }#END IF
     }#END WHILE
     $insertManager->endParsing; #perform some additional work (if needed)
 
     my $endTime = time;
     $deltaTime = $endTime - $startTime;
-    print "$deltaTime seconds was required to parse the XML file\n" if($verbose || $debug);    
+    dPrintln("$deltaTime seconds was required to parse the XML file\n", $verbose, 1);    
 }
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Checks for the existance of a file based on the path given. If the 
 # file exists then 1 is returned. Otherwise return 0.
-#   @param the path of hte file as a string.
+#   @param the path of the file as a string.
 sub fileExists {
     my $path = shift;
     
@@ -207,6 +228,14 @@ sub countLinesInFile {
     return ($totalLines, $deltaTime);
 }
 
-
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Print a line depending on verbosity level
+sub dPrintln {
+    my $line = shift;
+    my $currDebugLevel = shift;
+    my $minDebugLevel = shift;
+    
+    print $line."\n" if($currDebugLevel >= $minDebugLevel);
+}
 
 
