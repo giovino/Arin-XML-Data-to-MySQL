@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -w
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # This perl script reads an xml file and purges the contents into
 # a temporary  MySQL database. Once the database has been created 
@@ -16,7 +16,6 @@
 #   -h, --host      : the address of the dbms host.
 #   -g, --port      : the port to connect to. Why use -g instead of -H? Because Getopt is case insensitive. '-g' stands for gate.
 #   --help          : print usage information to the screen.
-# TODO Convert ArinXMLParser to an executable script.
 # TODO Convert the documentation to pad for all of the scripts
 
 use strict;
@@ -28,7 +27,8 @@ use InsertManager::XMLSimpleInsertManager;
 use InsertManager::SAXInsertManager;
 use Cwd;
 use Scalar::Util 'blessed';
-use Getopt::Long; #Used for processing arguments.
+use Getopt::Long;   #Used for processing arguments.
+use Pod::Usage;     #Used to display usage information
 
 #Right now the default key that XML::Simple usees for element text is #TEXT. 
 use constant {
@@ -36,6 +36,7 @@ use constant {
 };
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~ GET ARGUMENTS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+my $numArgs = @ARGV;
 #Hash to store all of the arguments.
 my $args = {
     'verbose'   => 0,
@@ -47,25 +48,30 @@ my $args = {
     'host'      => '',
     'port'      => '',
     'help'      => '',
+    'man'       => '',
     'buffer-size'   => ''
 };
-GetOptions( 'v|verbose=i'   => \$args->{'verbose'},      #accept only integer 
-            'f|file=s'      => \$args->{'file'},        #accept only string
-            'm|dbms=s'      => \$args->{'dbms'},
-            'd|database=s'  => \$args->{'database'},
-            'u|user=s'      => \$args->{'user'},
-            'p|password=s'  => \$args->{'password'},
-            'h|host=s'      => \$args->{'host'},
-            'g|port=i'      => \$args->{'port'},
-            'help|?'        => \$args->{'help'},           #Treat as trigger only
-            'buffer-size=i'   => \$args->{'buffer-size'}
+GetOptions( 'v|verbose=i'       => \$args->{'verbose'},      #accept only integer 
+            'f|file=s'          => \$args->{'file'},        #accept only string
+            'm|dbms=s'          => \$args->{'dbms'},
+            'd|database=s'      => \$args->{'database'},
+            'u|user=s'          => \$args->{'user'},
+            'p|password=s'      => \$args->{'password'},
+            'h|host=s'          => \$args->{'host'},
+            'g|port=i'          => \$args->{'port'},
+            'help|?'            => \$args->{'help'},           #Treat as trigger only
+            'man'               => \$args->{'man'},
+            'buffer-size=i'     => \$args->{'buffer-size'}
         );
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #If the 'help' variable has been set then display usage information
 #Otherwise begin parsing the document
-if($args->{'help'}) {
-    #Print usage information
+if (($numArgs == 0) && (-t STDIN)) {
+    pod2usage("$0: Incorrect usage. Use the --help arguement for help"); 
+}
+elsif($args->{'help'} || $args->{'man'}) {
+    pod2usage(1);
 }
 else {
     #Create a BulkWhois::Schema object (which inherits from DBIx::Class::Schema).
@@ -237,5 +243,85 @@ sub dPrintln {
     
     print $line."\n" if($currDebugLevel >= $minDebugLevel);
 }
+
+__END__
+
+
+=head1 NAME
+    
+   bulkwhois2database - A script that takes in a BulkWhois.xml file from ARIN
+   and dumps it to the specified database. 
+
+=head1 SYNOPSIS
+    
+bulkwhois2database  [--file FILE] [--dbms STRING] [--database STRING] 
+                    [--host HOST_ADDRESS] [--port PORT_NUMBER] 
+                    [--user USER_NAME] [--password PASSWORD]
+
+bulkwhois2database  [--file FILE] [--dbms STRING] [--database STRING] 
+                    [--host HOST_ADDRESS] [--port PORT_NUMBER] 
+                    [--user USER_NAME] [--password PASSWORD] 
+                    [optional arguments ...]
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--help>
+    
+    Print usage information to the screen.
+
+=item B<--man>
+    
+    Print the man page to the screen.
+
+=item B<-v NUM, --verbose NUM>
+    
+    Set the verbosity (debugging) level. This argument is optional. 
+
+=item B<-f FILE, --file FILE> 
+    
+    The name of the file that contains the bulkwhois xml data.
+
+=item B<-m STRING, --dbms STRING>
+    
+    The name of the database management system. For example if using MySQL then
+    use --dbms mysql or -m mysql.
+
+=item B<-d STRING, --database STRING>
+    
+    The name of the database to use. 
+
+=item B<-u USER_NAME, --user USER_NAME>
+    
+    The user to log in as.
+
+=item B<-p PASSWORD, --password PASSWORD>
+
+    The password to use.
+
+=item B<-h HOST_ADDRESS, --host HOST_ADDRESS>
+    
+    The address of the host with the database management system.
+
+=item B<-g PORT_NUMBER, --port PORT_NUMBER>
+
+    The port to connect to.
+
+=item B<--buffer-size NUMBER>
+
+    Set the maximum buffer size before performing a bulk dump to the database.
+    This parameter is optional. If nothing is passed in the buffer size 
+    defaults to 4095
+
+=back
+
+=head1 DESCRIPTION
+    
+    bulkwhois2database takes in an ARIN BulkWhois xml file and dumps it to the 
+    specified database. Beware! When the file is dumped to a database all of 
+    the previous tables will be dropped and repopulated with the new data.
+
+=cut
 
 
