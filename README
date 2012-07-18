@@ -27,9 +27,7 @@ OTHER TOOLS:
     -perl dbicdump.pl -o dump_directory=oldbulkwhoisdump -o components='["InflateColumn::DateTime"]' MyApp::Schema dbi:mysql:arin root 12345
    
 TODO:
-    1) Convert ArinXMLParser to an executable script with arguments.
     2) See if project can be added into the Arin project community.
-    3) Update documentation to POD
     4) Check for unexpexted elements. Log it to a file.
-    5) Add project to Arin community projects
+    6) Pass verbosity veriable to other perl files. 
 EXECUTION:
