@@ -1,22 +1,9 @@
 #!/usr/bin/perl -w
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# This perl script reads an xml file and purges the contents into
-# a temporary  MySQL database. Once the database has been created 
-# the script performs a second pass through and creates a permanent
-# MySQL database in 3rd normal form (or at least makes it's best 
-# attempt)
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# bulkwhois2database.pl is a script that takes in a bulkwhois xml file and 
+# dumps it to a database. For usage information go to the bottom of this file 
+# or run ./bulkwhois2database --help.
 #
-# TODO Add command line arguments to the application.
-#   -v, --verbose   : same as debugging.
-#   -f, --file      : the xml file to parse and insert into the database.
-#   -m, --dbms      : the database management system to connect to.
-#   -d, --database  : the databse to connect to.
-#   -u, --user      : the username to connect as.
-#   -p, --password  : the password of the user. passing in p will prompt for a password.
-#   -h, --host      : the address of the dbms host.
-#   -g, --port      : the port to connect to. Why use -g instead of -H? Because Getopt is case insensitive. '-g' stands for gate.
-#   --help          : print usage information to the screen.
-# TODO Convert the documentation to pad for all of the scripts
 
 use strict;
 use warnings;
@@ -35,9 +22,8 @@ use constant {
     ELEMENT_TEXT => '#TEXT'
 };
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~ GET ARGUMENTS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~ GET ARGUMENTS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 my $numArgs = @ARGV;
-#Hash to store all of the arguments.
 my $args = {
     'verbose'   => 0,
     'file'      => '',
@@ -51,22 +37,20 @@ my $args = {
     'man'       => '',
     'buffer-size'   => ''
 };
-GetOptions( 'v|verbose=i'       => \$args->{'verbose'},      #accept only integer 
-            'f|file=s'          => \$args->{'file'},        #accept only string
+GetOptions( 'v|verbose=i'       => \$args->{'verbose'}, #accept only integer 
+            'f|file=s'          => \$args->{'file'},    #accept only string
             'm|dbms=s'          => \$args->{'dbms'},
             'd|database=s'      => \$args->{'database'},
             'u|user=s'          => \$args->{'user'},
             'p|password=s'      => \$args->{'password'},
             'h|host=s'          => \$args->{'host'},
             'g|port=i'          => \$args->{'port'},
-            'help|?'            => \$args->{'help'},           #Treat as trigger only
+            'help|?'            => \$args->{'help'},    #Treat as trigger only
             'man'               => \$args->{'man'},
             'buffer-size=i'     => \$args->{'buffer-size'}
         );
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#If the 'help' variable has been set then display usage information
-#Otherwise begin parsing the document
 if (($numArgs == 0) && (-t STDIN)) {
     pod2usage("$0: Incorrect usage. Use the --help arguement for help"); 
 }
@@ -82,9 +66,9 @@ else {
                             $args->{'password'}
                         ) or die "Failed to connect to database", DBIx->errstr;
     #Drop all of the tables from the database and recreate them
-    my $connResults = $bulkWhoisSchema->deploy({add_drop_table => 1});  
-    
     dPrintln("Connecting to database. Displaying connection string:", $args->{'verbose'}, 1);
+    dPrintln("Dropping all tables and starting fresh\n", $args->{'verbose'}, 1);
+    my $connResults = $bulkWhoisSchema->deploy({add_drop_table => 1});  
 
     #    $connResults will always have a false value because the developers decided so.
     #    http://lists.scsys.co.uk/pipermail/dbix-class/2009-June/007963.html 
@@ -121,14 +105,13 @@ else {
 #  This function expects all of its parameters
 #  to be passed in as key => value pairs
 #   @param file => the file to parse and dump to the database.
-#   @param insertManager => an object that implements the InsertManagerInterface
+#   @param insertManager => an object that implements the InsertManagerInterface 
 #   @param @optional verbose => 'boolean value' 1 or 0 to turn on or off verbal mode.
-#   @param @optional debug => 'boolean value' 1 or 0 to turn on or off debug mode.
+#
 sub feedFileToInsertManager {
 
     #Initialize variables.
     my %args        = @_;
-    my $debug       = ($args{'debug'}) ? $args{'debug'} : 0;
     my $verbose     = ($args{'verbose'}) ? $args{'verbose'} : 0;
     my $insertManager   = ($args{'insertManager'}) ? $args{'insertManager'} : die "I need an object that implements the InsertManagerInterface. insertManager => an object.\n";
     my $file    = ($args{'file'}) ? $args{'file'} : die "I need a file to parse.\n";
@@ -145,9 +128,7 @@ sub feedFileToInsertManager {
                                     )
                     : die $file . " is an invalid path\n";
 
-    #Count the number of lines in the file for a progress report.
-    #Set the refresh rate afterwards. This will print an update of 
-    #the reading progress for 400 times throughout the dumping.
+    #Get line count for performance & measurements
     dPrintln("Calculating lines", $verbose, 1);
     my ($totalLines, $deltaTime) = ($verbose >= 1) ? countLinesInFile($file) : 0;
     dPrintln("Finished calculating lines", $verbose, 1);
@@ -164,16 +145,14 @@ sub feedFileToInsertManager {
     my $sT = time;  #Used to tell you the time between a refresh.
     my $previousCounter = 0;
     while($xmlReader->read()) {
-        #Go through all of the child elements of the root node. Use XML::Simple
-        # to convert them into a hash. Then go through the hash and push it into 
-        # the database.
+        #Only work on child elements of the root element <bulkwhois>
         if(($xmlReader->depth > 0) &&
             ($xmlReader->nodeType() != XML_READER_TYPE_SIGNIFICANT_WHITESPACE)) {
 
             #Print the progress to the screen.
-            do{ 
+            if(($counter % $refreshRate) == 0) { 
                 dPrintln("Iteration: $counter\n", $verbose, 2);
-            } if(($counter % $refreshRate) == 0);
+            }
             if(!($counter % $refreshRate) && ($verbose >= 1)) {
                 my $dT = time - $sT;
                 $sT = time;
@@ -196,13 +175,15 @@ sub feedFileToInsertManager {
     my $endTime = time;
     $deltaTime = $endTime - $startTime;
     dPrintln("$deltaTime seconds was required to parse the XML file\n", $verbose, 1);    
-}
+}#END feedFileToInsertManager
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Checks for the existance of a file based on the path given. If the 
 # file exists then 1 is returned. Otherwise return 0.
+#
 #   @param the path of the file as a string.
+#
 sub fileExists {
     my $path = shift;
     
@@ -214,6 +195,7 @@ sub fileExists {
 # Count the total number of lines in the file.
 #
 #   @param the path of the file to count.
+#
 sub countLinesInFile {
     my $path = shift;
     
@@ -236,6 +218,10 @@ sub countLinesInFile {
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Print a line depending on verbosity level
+#
+#   @param the string to print.
+#   @param the current debug level.
+#   @param the minimum level to trigger a print event.
 sub dPrintln {
     my $line = shift;
     my $currDebugLevel = shift;
@@ -262,6 +248,11 @@ bulkwhois2database  [--file FILE] [--dbms STRING] [--database STRING]
                     [--host HOST_ADDRESS] [--port PORT_NUMBER] 
                     [--user USER_NAME] [--password PASSWORD] 
                     [optional arguments ...]
+
+EXAMPLE:
+    ./bulkwhois2database.pl --file ../arin_db.xml --dbms mysql 
+                            --database BulkWhois --host localhost --port 3306 
+                            --user root --password 12345 --verbose 1
 
 =head1 OPTIONS
 
