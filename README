@@ -7,6 +7,7 @@ REQUIRMENTS:
         -XML::Simple needs to be installed.
         -XML::LibXML::SAX or XML::SAX   # Useing these two modules with XML::Simple
         -XML::SAX::ParserFactory        # makes things run faster but it hasn't been implemented. 
+        -Log::Log4perl::Appender::File  # For logging features
 
 INSTALLATION:
 -Ubuntu 12.04 LTS
