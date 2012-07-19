@@ -16,6 +16,10 @@ use Cwd;
 use Scalar::Util 'blessed';
 use Getopt::Long;   #Used for processing arguments.
 use Pod::Usage;     #Used to display usage information
+use Log::Log4perl qw(:easy);    #Simple and intuitive logging
+#use Log::Log4perl::Appender::File;      #Used for logging to a file
+#use Log::Log4perl::Appender::Screen;    #Used for logging to a screen
+#use Log::Log4perl::Level;               #Constants $FATAL,...,$TRACE
 
 #Right now the default key that XML::Simple usees for element text is #TEXT. 
 use constant {
@@ -26,6 +30,7 @@ use constant {
 my $numArgs = @ARGV;
 my $args = {
     'verbose'   => 0,
+    'log'       => 0,
     'file'      => '',
     'dbms'      => '',
     'database'  => '',
@@ -37,7 +42,8 @@ my $args = {
     'man'       => '',
     'buffer-size'   => ''
 };
-GetOptions( 'v|verbose=i'       => \$args->{'verbose'}, #accept only integer 
+GetOptions( 'v|verbose=s'       => \$args->{'verbose'}, #accept only integer 
+            'l|log=s'           => \$args->{'log'},
             'f|file=s'          => \$args->{'file'},    #accept only string
             'm|dbms=s'          => \$args->{'dbms'},
             'd|database=s'      => \$args->{'database'},
@@ -50,6 +56,31 @@ GetOptions( 'v|verbose=i'       => \$args->{'verbose'}, #accept only integer
             'buffer-size=i'     => \$args->{'buffer-size'}
         );
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Initialize a logger to the appropriate level.
+my $logLevel = $OFF;
+if($args->{'log'} && !$args->{'verbose'}) {
+    print "You need to set the verbosity level to at least '1' if you are going
+to use logging\n";
+    print "type 'bulkwhois2database --help' for more information\n";
+    exit;
+}
+elsif($args->{'log'} && $args->{'verbose'}) {
+    Log::Log4perl->easy_init({ 
+            level => stringForLog4PerlLevel($args->{'verbose'}),
+            file => ">>".$args->{'log'}
+        });
+    $logLevel = stringForLog4PerlLevel($args->{'verbose'});
+}
+elsif($args->{'verbose'}) {    
+    Log::Log4perl->easy_init(stringForLog4PerlLevel($args->{'verbose'}));
+    $logLevel = stringForLog4PerlLevel($args->{'verbose'});
+}
+else {
+    Log::Log4perl->easy_init($OFF);
+}
+#$logger->log($TRACE => "Woo hoo I did a trace with log4perl! self->patOnBack();");
+
 
 if (($numArgs == 0) && (-t STDIN)) {
     pod2usage("$0: Incorrect usage. Use the --help arguement for help"); 
@@ -66,28 +97,24 @@ else {
                             $args->{'password'}
                         ) or die "Failed to connect to database", DBIx->errstr;
     #Drop all of the tables from the database and recreate them
-    dPrintln("Connecting to database. Displaying connection string:", $args->{'verbose'}, 1);
-    dPrintln("Dropping all tables and starting fresh\n", $args->{'verbose'}, 1);
+    TRACE "Connecting to database"; 
+    TRACE "Displaying connection string:", $dsn;
+    TRACE "User: ", $args->{'user'}, ($args->{'password'}) ? "\tPassword: yes" : "\tPassword: no";
     my $connResults = $bulkWhoisSchema->deploy({add_drop_table => 1});  
 
     #    $connResults will always have a false value because the developers decided so.
     #    http://lists.scsys.co.uk/pipermail/dbix-class/2009-June/007963.html 
     #    The link above is a response to this issue.
 
-    #Verbose statements 
-    dPrintln("\t"       . $dsn, $args->{'verbose'}, 1);
-    dPrintln("\tUser: "   . $args->{'user'}, $args->{'verbose'}, 1);
-    dPrintln(($args->{'password'}) ? "\tPassword: yes" : "\tPassword: no", $args->{'verbose'}, 1); 
 
     #Set up the insertManager
     my $bufferSize = ($args->{'buffer-size'}) ? $args->{'buffer-size'} : 4095;
-    dPrintln("Setting up an InsertManager object with a default buffer size of $bufferSize",
-                $args->{'verbose'}, 1);
+    TRACE "Setting up an InsertManager object with a default buffer size of $bufferSize";
     my $insertManager = InsertManager::XMLSimpleInsertManager->new(bufferSize => $bufferSize, schema => $bulkWhoisSchema);
     $insertManager->defaultElementTextKey(ELEMENT_TEXT);
 
     #begin parsing and dumping to database
-    dPrintln("Begin feeding xml to InsertManager object", $args->{'verbose'}, 1);
+    TRACE "Begin feeding xml to InsertManager object";
     feedFileToInsertManager(
                     file => $args->{'file'}, 
                     insertManager => $insertManager,
@@ -116,11 +143,11 @@ sub feedFileToInsertManager {
     my $insertManager   = ($args{'insertManager'}) ? $args{'insertManager'} : die "I need an object that implements the InsertManagerInterface. insertManager => an object.\n";
     my $file    = ($args{'file'}) ? $args{'file'} : die "I need a file to parse.\n";
  
-    dPrintln("Entered: ".(caller(0))[3], $verbose, 3); #get the name of this function.
+    DEBUG "Entered: ", (caller(0))[3]; #get the name of this function.
 
     #Make sure the file path is valid. If it is then initialize an XML::LibXML::Reader 
     # object.
-    dPrintln("Checking the file's path", $verbose, 2);
+    TRACE "Checking the file's path";
     my $xmlReader = (fileExists($file)) 
                     ? XML::LibXML::Reader->new(
                                     'location' => $file, 
@@ -129,18 +156,18 @@ sub feedFileToInsertManager {
                     : die $file . " is an invalid path\n";
 
     #Get line count for performance & measurements
-    dPrintln("Calculating lines", $verbose, 1);
-    my ($totalLines, $deltaTime) = ($verbose >= 1) ? countLinesInFile($file) : 0;
-    dPrintln("Finished calculating lines", $verbose, 1);
+    TRACE "Calculating lines";
+    my ($totalLines, $deltaTime) = ($logLevel != $OFF) ? countLinesInFile($file) : 0;
+    TRACE "Finished calculating lines";
     my $counter = 0;
     my $refreshRate = (($totalLines / 10000) < 1) ? 1 : int($totalLines / 10000);
-    dPrintln("Time to count lines: $deltaTime seconds", $verbose, 2);
-    dPrintln("Lines counted: $totalLines\n", $verbose, 2);
-    dPrintln("Refresh every $refreshRate lines parsed", $verbose, 2);
+    DEBUG "Time to count lines: $deltaTime seconds";
+    DEBUG "Lines counted: $totalLines";
+    DEBUG "Refresh every $refreshRate lines parsed";
 
     #Loop through the contents of the .xml file. Store all of the elements into the 
     #database.
-    dPrintln("Let the feeding begin", $verbose, 1); 
+    TRACE "Let the feeding begin";
     my $startTime = time; #Start the stopwatch
     my $sT = time;  #Used to tell you the time between a refresh.
     my $previousCounter = 0;
@@ -150,18 +177,18 @@ sub feedFileToInsertManager {
             ($xmlReader->nodeType() != XML_READER_TYPE_SIGNIFICANT_WHITESPACE)) {
 
             #Print the progress to the screen.
-            if(($counter % $refreshRate) == 0) { 
-                dPrintln("Iteration: $counter\n", $verbose, 2);
+            if(!($counter % $refreshRate) && ($logLevel == $DEBUG)) { 
+                DEBUG "Iteration: $counter";
             }
-            if(!($counter % $refreshRate) && ($verbose >= 1)) {
+            if(!($counter % $refreshRate) && ($logLevel == $TRACE) || ($logLevel == $DEBUG)) {
                 my $dT = time - $sT;
                 $sT = time;
                 my $dCounter = $counter - $previousCounter;
                 $previousCounter = $counter;
                 my $percentComplete = int((($xmlReader->lineNumber()) / $totalLines) * 100);
-                print "$percentComplete% of the file has been processed.\n";
-                print "\tIt took $dT seconds to parse $dCounter elements (asn, org, poc, or net).\n";
-                print "\t". ($totalLines - $xmlReader->lineNumber) ." lines left to parse.\n";
+                TRACE "\t$percentComplete% of the file has been processed.";
+                TRACE "\t\tIt took $dT seconds to parse $dCounter elements (asn, org, poc, or net).";
+                TRACE "\t\t". ($totalLines - $xmlReader->lineNumber) ." lines left to parse.";
             } 
             
             $insertManager->parseXML($xmlReader->readOuterXml(), $xmlReader->name); 
@@ -174,7 +201,7 @@ sub feedFileToInsertManager {
 
     my $endTime = time;
     $deltaTime = $endTime - $startTime;
-    dPrintln("$deltaTime seconds was required to parse the XML file\n", $verbose, 1);    
+    TRACE "$deltaTime seconds was required to parse the XML file";
 }#END feedFileToInsertManager
 
 
@@ -230,6 +257,19 @@ sub dPrintln {
     print $line."\n" if($currDebugLevel >= $minDebugLevel);
 }
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# String for Log::Log4perl::Level constant
+#
+# @param a string
+#
+# @return one of the logging constant values from Log::Log4perl::Level
+#
+sub stringForLog4PerlLevel {
+    my $string = shift;
+
+    return Log::Log4perl::Level::to_priority($string);
+}
+
 __END__
 
 
@@ -248,6 +288,16 @@ bulkwhois2database  [--file FILE] [--dbms STRING] [--database STRING]
                     [--host HOST_ADDRESS] [--port PORT_NUMBER] 
                     [--user USER_NAME] [--password PASSWORD] 
                     [optional arguments ...]
+
+bulkwhois2database  [--file FILE] [--dbms STRING] [--database STRING] 
+                    [--host HOST_ADDRESS] [--port PORT_NUMBER] 
+                    [--user USER_NAME] [--password PASSWORD] 
+                    [--verbose STRING] [optional arguments ...]
+
+bulkwhois2database  [--file FILE] [--dbms STRING] [--database STRING] 
+                    [--host HOST_ADDRESS] [--port PORT_NUMBER] 
+                    [--user USER_NAME] [--password PASSWORD] 
+                    [--verbose STRING] [--log FILE]
 
 EXAMPLE:
     ./bulkwhois2database.pl --file ../arin_db.xml --dbms mysql 
@@ -304,6 +354,24 @@ EXAMPLE:
     Set the maximum buffer size before performing a bulk dump to the database.
     This parameter is optional. If nothing is passed in the buffer size 
     defaults to 4095
+
+=item B<-v STRING, --verbose STRING>
+
+    Set the verbosity of the application. Use one of the four values.
+        FATAL
+        ERROR
+        WARN
+        INFO
+        DEBUG
+        TRACE
+        ALL
+        OFF
+    Refer to log4Perl on CPAN for more information.
+
+=item B<-l FILE, --log FILE>
+    
+    Enable logging to the specified file. Use this in conjunction with 
+    --verbose, -v. Otherwise there will be an error. 
 
 =back
 

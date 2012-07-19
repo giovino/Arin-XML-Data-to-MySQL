@@ -23,6 +23,12 @@ use Switch;
 use XML::Simple; #It may be easer to use xml simple for each child elment (asn, org, net, and poc).
 $XML::Simple::PREFERRED_PARSER = 'XML::LibXML::SAX'; #Makes XML::Simple Run faster
 
+use constant {
+    SILENT      => 0,
+    VERBOSE     => 1,
+    DEBBUGGING  => 2
+};
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Create a new InsertManager. 
 #   
@@ -35,7 +41,8 @@ sub new {
     #Get the argumensts
     my $class = shift;
     my %args = @_;
-    my $bufferSize  = ($args{'bufferSize'}) ? $args{'bufferSize'} : 10;
+    my $bufferSize  = ($args{'bufferSize'}) ? $args{'bufferSize'}   : 4095;
+    my $verbosity   = ($args{'verbosity'})  ? $args{'verbosity'}    : 0;
     #Make sure a schema object is passed in. Otherwise die.
     my $schemaObj   = (blessed($args{'schema'}) && (blessed($args{'schema'}) eq "BulkWhois::Schema")) 
                     ? $args{'schema'} 
@@ -45,6 +52,7 @@ sub new {
 
     my $buffer = InsertManager::BufferManager->new(bufferSize => $bufferSize, schema => $schemaObj);
     $self->{BUFFER} = $buffer; #Stores the buffer object
+    $self->{VERBOSITY} = $verbosity;
 
     #Perform the blessing
     bless $self, $class;
@@ -52,13 +60,14 @@ sub new {
     return $self;
 }
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # This method is overriding InsertManager::InsertManagerInterface::parseXML.
-# All it does is it takes in a sub element and uses 
-# XML::Simple::XMLin to convert it into a hash. It then 
-# passes that hash to addRowToBuffer for processing.
+# All it does is it takes in a sub element and uses XML::Simple::XMLin to 
+# convert it into a hash. It then passes that hash to addRowToBuffer for 
+# processing.
 #
 # @param xml
+#
 sub parseXML {
     my $self = shift;
     my $xml = shift;
@@ -76,8 +85,9 @@ sub parseXML {
     $self->addRowToBuffer(\%parsedXML);
 }#END parseXML
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Overrides InsertManager::InsertManagerInterface::endParsing
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Overrides InsertManager::InsertManagerInterface::endParsing. Flushes any 
+# remaining items to the database.
 sub endParsing {
     my $self = shift;
 
