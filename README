@@ -1,12 +1,12 @@
 REQUIRMENTS: 
 	-Perl needs to be installed.
-	-A database needs to be installed. (Right now we have only tested with MySQL)
-	-DBIx::Class module needs to be installed.
-        -DBIx::Class::Schema has a 'deploy' feature.
-        -XML::LibXML::Reader will need to be installed. (This isn't needed anymore, but I'm going to keep all of the installation requirements in the readme for future reference).
+	-A database management system needs to be installed. 
+        -DBIx::Class module needs to be installed. 
+        -DBIx::Class::Schema has a 'deploy' feature. 
+        -XML::LibXML::Reader         
         -XML::Simple needs to be installed.
         -XML::LibXML::SAX or XML::SAX   # Useing these two modules with XML::Simple
-        -XML::SAX::ParserFactory        # makes things run faster
+        -XML::SAX::ParserFactory        # makes things run faster but it hasn't been implemented. 
 
 INSTALLATION:
 -Ubuntu 12.04 LTS
@@ -29,5 +29,7 @@ OTHER TOOLS:
 TODO:
     2) See if project can be added into the Arin project community.
     4) Check for unexpexted elements. Log it to a file.
+    5) Add more advanced installation and running instructions to the readme.
     6) Pass verbosity veriable to other perl files. 
+
 EXECUTION:
