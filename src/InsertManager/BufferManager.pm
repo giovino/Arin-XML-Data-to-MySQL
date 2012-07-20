@@ -22,6 +22,9 @@ use Data::Dumper;
 #   @param schema => $schemaObject. A refernce to the
 #       DBIx::Class::Schema object. This will be used 
 #       to perform the inserts on.
+#   @param logger => $loggerObject. A refernce to a 
+#       log4perl::Logger object.
+#
 sub new {
     #Get the argumensts
     my $class = shift;
@@ -31,11 +34,15 @@ sub new {
     my $schemaObj   = (blessed($args{'schema'}) && (blessed($args{'schema'}) eq "BulkWhois::Schema")) 
                     ? $args{'schema'} 
                     : die "I need a schema object, Create one and pass it in.\n";
+    my $logger   = (blessed($args{'logger'}) && (blessed($args{'logger'}) eq "Log::Log4perl::Logger")) 
+                    ? $args{'logger'} 
+                    : die "I need a log4perl object, Create one and pass it in.\n";
     my $self->{MAX_BUFFER_SIZE} = $bufferSize; 
     $self->{SCHEMA_OBJECT} = $schemaObj; 
     $self->{BUFFER} = {};
     $self->{CURRENT_BUFFER_SIZE} = 0;
     $self->{CURRENT_SUB_BUFFER_SIZES} = {};
+    $self->{LOGGER} = $logger;
 
     #Initialize the buffer with all of the sub buffers for the tables.
     #The format will be key => array pairs.
@@ -79,9 +86,9 @@ sub pushToBuffer {
 
     # Perform extra work if the subbuffer reaches its maximum capacity
     if($self->{CURRENT_SUB_BUFFER_SIZES}->{$table} == $self->{MAX_BUFFER_SIZE}) {
-        print "Buffer capacity for $table reached. Dumping to database.";
+#        print "Buffer capacity for $table reached. Dumping to database.";
         $self->insertAndFlushBuffer($table);
-        print "Done\n";
+#        print "Done\n";
 
         $self->{CURRENT_SUB_BUFFER_SIZES}->{$table} = 0;
         $self->{CURRENT_BUFFER_SIZE} -= $self->{MAX_BUFFER_SIZE};

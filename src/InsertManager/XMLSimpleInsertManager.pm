@@ -23,13 +23,7 @@ use Switch;
 use XML::Simple; #It may be easer to use xml simple for each child elment (asn, org, net, and poc).
 $XML::Simple::PREFERRED_PARSER = 'XML::LibXML::SAX'; #Makes XML::Simple Run faster
 
-use constant {
-    SILENT      => 0,
-    VERBOSE     => 1,
-    DEBBUGGING  => 2
-};
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Create a new InsertManager. 
 #   
 #   @param bufferSize => 'the buffer size'. The maximum size 
@@ -37,6 +31,8 @@ use constant {
 #   @param schema => $schemaObject. A refernce to the
 #       DBIx::Class::Schema object. This will be used 
 #       to perform the inserts on.
+#   @param logger => log4Perl logger object. 
+#
 sub new {
     #Get the argumensts
     my $class = shift;
@@ -46,16 +42,21 @@ sub new {
     #Make sure a schema object is passed in. Otherwise die.
     my $schemaObj   = (blessed($args{'schema'}) && (blessed($args{'schema'}) eq "BulkWhois::Schema")) 
                     ? $args{'schema'} 
-                    : die "I need a schema object, Create one and pass it in.\n";
+                    : die "I need a schema object, Create one and pass it in.\n"; 
+    my $logger   = (blessed($args{'logger'}) && (blessed($args{'logger'}) eq "Log::Log4perl::Logger")) 
+                    ? $args{'logger'} 
+                    : die "I need a log4perl object, Create one and pass it in.\n";
     my $self->{ITEMS_PROCESSED} = 0;
     $self->{DEFAULT_ELEMENT_TEXT_KEY} = undef;
 
     my $buffer = InsertManager::BufferManager->new(bufferSize => $bufferSize, schema => $schemaObj);
-    $self->{BUFFER} = $buffer; #Stores the buffer object
-    $self->{VERBOSITY} = $verbosity;
+    $self->{BUFFER} = $buffer;  #Stores the buffer object
+    $self->{LOGGER} = $logger;    #Stores a logger object.
 
     #Perform the blessing
     bless $self, $class;
+    
+    $self->log->trace("XMLSimpleInsertManger Initialized");
 
     return $self;
 }
@@ -121,10 +122,14 @@ sub addRowToBuffer {
         }
         else {
             $self->insertAndFlushBuffer;
-            print Dumper $key, $value;
-            print "Unable to find a function that can handle the hash you passed in.\n";
-            print "Items Processed: ". $self->{ITEMS_PROCESSED} ,"\n";
-            exit;
+            $self->log->error((Dumper $key, $value));
+            $self->log->error("Unable to find a function that can handle the hash you passed in.");
+            $self->log->error("Items Processed: ", $self->{ITEMS_PROCESSED});
+            if($self->log->is_error()) {
+                $self->log->error("Application exiting at ", (caller(0))[3]);
+                print "Application died. Check log\n";
+                exit;
+            }
         }
 
         $self->{ITEMS_PROCESSED}++;
@@ -148,6 +153,8 @@ sub simpleHashForRowHash {
     my $rowToPush = shift;
     my $table = shift;
     my $element = shift;
+    
+    #TODO Make sure that there are no elements in xml that are not defined in the mappings.
 
     my %tmpHash = ();
     #parse all of the simple elements in the hash.
@@ -212,8 +219,8 @@ sub commentToString {
     }
     elsif(!defined($commentToParse->{line})) {}
     else {
-        print "Unexpected value when received a comment to parse.\n";
-        print Dumper $commentToParse; 
+        $self->log->error("Unexpected value when received a comment to parse.");
+        $self->log->error(Dumper $commentToParse); 
     }
 
     return $comment;
@@ -238,13 +245,14 @@ sub addEmails {
     elsif(ref($emails->{'email'}) =~ m/ARRAY/) {
         foreach(@{$emails->{'email'}}) { 
             if(ref($_) =~ m/HASH/) {#Just incase there is extra data in the emails element
-                print "Unhandled xml simple hash structure.\n";
-                print "I was expecting an array of scalars but I got this.\n";
-                print '$_: '.Dumper $_;
-                print "tableToUpdate: $tableToUpdate\n";
-                print "parentHandle: $parentHandle\n";
-                print "emails: ".Dumper $emails;
-                exit;
+                $self->log->error("Unhandled xml simple hash structure.");
+                $self->log->error("I was expecting an array of scalars but I got this.");
+                $self->log->error('$_: ', (Dumper $_));
+                $self->log->error("tableToUpdate: $tableToUpdate");
+                $self->log->error("parentHandle: $parentHandle\n");
+                $self->log->error("emails: ".Dumper $emails);
+                print "There has been an error while parsing the data. Please check the log file\n";
+                die;
             }
             my %tmpHash = ();
             $tmpHash{$TABLES->{$tableToUpdate}->[0]} = $parentHandle; #Always assumes that column 0 stores the parentHandle in the database.
@@ -263,8 +271,9 @@ sub addEmails {
         return;
     }
     else {
-        print "Unexpected value when received an email element to parse.\n";
-        print Dumper $emails; 
+        $self->log->error("Unexpected value when received an email element to parse.\n");
+        $self->log->error((Dumper $emails)); 
+        print "Application died. Check log\n";
         exit;
     }
 }#END addEmails
@@ -291,12 +300,12 @@ sub addPhones {
     }
     elsif(ref($phones->{'phone'}) =~ m/ARRAY/) {
         my @hashArray = ();
-        #print Dumper $phones->{'phone'};
         foreach(@{$phones->{'phone'}}) {  
             my $handle = $_->{'number'}->{'pocHandle'};
             if($handle ne $parentHandle) {
-                print "The parent handle $parentHandle doesn't match";
-                print "the handle $handle in the phone element\n";
+                $self->log->error("The parent handle $parentHandle doesn't match");
+                $self->log->error("the handle $handle in the phone element");
+                print "Application died. Check log\n";
                 exit;
             }
 
@@ -313,8 +322,9 @@ sub addPhones {
     elsif(ref($phones->{'phone'}) =~ m/HASH/) { 
         my $handle = $phones->{'phone'}->{'number'}->{'pocHandle'};
         if($handle ne $parentHandle) {
-            print "The parent handle $parentHandle doesn't match";
-            print "the handle $handle in the phone element\n";
+            $self->log->error("The parent handle $parentHandle doesn't match");
+            $self->log->error("the handle $handle in the phone element");
+            print "Application died. Check log\n";
             exit;
         }
         
@@ -327,8 +337,9 @@ sub addPhones {
         return;
     }
     else { 
-        print "Unexpected value when received an email element to parse.\n";
-        print Dumper $phones; 
+        $self->log->error("Unexpected value when received an email element to parse.\n");
+        $self->log->error(Dumper $phones); 
+        print "Application died. Check log\n";
         exit;
     }
 }#END addPhones
@@ -386,9 +397,8 @@ sub addPocLinks {
     }
     elsif(!defined($pocLinks->{'pocLink'})) {return 1;}
     else {
-        print "Unexpected value when received a pocLinks element to parse.\n";
-        print Dumper $pocLinks; 
-       
+        $self->log->error("Unexpected value when received a pocLinks element to parse.");
+        $self->log->error((Dumper $pocLinks));  
         return 0;
     }
 }#END addPocLinks
@@ -409,7 +419,7 @@ sub addNetBlock {
     my $netBlocks = shift;
 
     if(!defined($netBlocks->{'netBlock'})) {
-        print "There are no netblocks assigned to this net\n";
+        $self->log->warn("There are no netblocks assigned to this net");
     }
     elsif(ref($netBlocks->{'netBlock'}) =~ m/HASH/) {
         $netBlocks->{'netBlock'}->{$TABLES->{$tableToUpdate}->[0]} = $parentHandle; #assume the first col will store the parent handle 
@@ -424,11 +434,11 @@ sub addNetBlock {
         $self->{BUFFER}->pushToBuffer($tableToUpdate, @hashArray); #TODO later collapse into a single push
     }
     else {
-        print "addNetBlock has encountered an unexpected value.\n";
-        print "Dumping to screen:\n";
-        print "Table to update: $tableToUpdate\n";
-        print "Parent handle: $parentHandle\n";
-        print Dumper $netBlocks;
+        $self->log->error("addNetBlock has encountered an unexpected value.");
+        $self->log->error("Dumping to screen:");
+        $self->log->error("Table to update: $tableToUpdate");
+        $self->log->error("Parent handle: $parentHandle");
+        $self->log->error((Dumper $netBlocks));
     }    
 }#END addNetBlock
 
@@ -465,12 +475,12 @@ sub addOriginASes {
         } 
     }
     else {
-        print "addOriginAS has encountered an unexpected value.\n";
-        print "Dumping to screen:\n";
-        print "Table to update: $tableToUpdate\n";
-        print "Parent handle: $parentHandle\n";
-        print "Type: ". ref($originASes->{'originAS'}) ."\n";
-        print Dumper $originASes;
+        $self->log->error("addOriginAS has encountered an unexpected value.");
+        $self->log->error("Dumping to screen:");
+        $self->log->error("Table to update: $tableToUpdate");
+        $self->log->error("Parent handle: $parentHandle");
+        $self->log->error("Type: ". ref($originASes->{'originAS'}) ."\n");
+        $self->log->error(Dumper $originASes);
     }   
 }#END OriginASes
 
@@ -507,8 +517,8 @@ sub addressToString {
     }
     elsif(!defined($addressToParse->{line})) {}
     else {
-        print "Unexpected value when received an address to parse.\n";
-        print Dumper $addressToParse; 
+        $self->log->error("Unexpected value when received an address to parse.\n");
+        $self->log->error((Dumper $addressToParse)); 
     }
 
     return $address;
@@ -544,7 +554,8 @@ sub parsingFunctionChooser {
                                             );
                 }
                 else {
-                    print "Unexpected element $subElementToParse for $elementToParse\n";
+                    $self->log->error("Unexpected element $subElementToParse for $elementToParse\n");
+                    
                 }
             }
         }
@@ -570,8 +581,7 @@ sub parsingFunctionChooser {
                                     $rowToPush->{$subElementToParse});
                 }
                 else {
-                    print "Unexpected element $subElementToParse for $elementToParse\n";
-                    exit;
+                    $self->log->error("Unexpected element $subElementToParse for $elementToParse\n"); 
                 }
             }
         }
@@ -594,8 +604,7 @@ sub parsingFunctionChooser {
                                             );
                 }
                 else {
-                    print "Unexpected element $subElementToParse for $elementToParse\n";
-                    exit;
+                    $self->log->error("Unexpected element $subElementToParse for $elementToParse\n"); 
                 }    
             }
         }
@@ -619,13 +628,13 @@ sub parsingFunctionChooser {
                                     );    
                 }
                 else {
-                    print "Unexpected element $subElementToParse for $elementToParse\n";
-                    exit;
+                    $self->log->error("Unexpected element $subElementToParse for $elementToParse\n"); 
                 }    
             }
         }
         else {
-            print "parsingFunctionChooser: Unable to find a function to parse $subElementToParse that belongs to $elementToParse\n";
+            $self->log->error("parsingFunctionChooser: Unable to find a function to parse $subElementToParse that belongs to $elementToParse");
+            print "There was an unexpected element. Application dying. Check log\n";
             exit;
         }
     }
@@ -640,6 +649,14 @@ sub defaultElementTextKey {
     my $self = shift;
     my $key = shift;
     $self->{DEFAULT_ELEMENT_TEXT_KEY} = ($key) ? $key : return $self->{DEFAULT_ELEMENT_TEXT_KEY};
+}
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Get the logger
+sub log {
+    my $self= shift;
+
+    return $self->{LOGGER};
 }
 
 return 1;

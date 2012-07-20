@@ -110,7 +110,7 @@ else {
     #Set up the insertManager
     my $bufferSize = ($args->{'buffer-size'}) ? $args->{'buffer-size'} : 4095;
     TRACE "Setting up an InsertManager object with a default buffer size of $bufferSize";
-    my $insertManager = InsertManager::XMLSimpleInsertManager->new(bufferSize => $bufferSize, schema => $bulkWhoisSchema);
+    my $insertManager = InsertManager::XMLSimpleInsertManager->new(bufferSize => $bufferSize, schema => $bulkWhoisSchema, logger => Log::Log4perl->get_logger);
     $insertManager->defaultElementTextKey(ELEMENT_TEXT);
 
     #begin parsing and dumping to database
@@ -157,7 +157,7 @@ sub feedFileToInsertManager {
 
     #Get line count for performance & measurements
     TRACE "Calculating lines";
-    my ($totalLines, $deltaTime) = ($logLevel != $OFF) ? countLinesInFile($file) : 0;
+    my ($totalLines, $deltaTime) = ($logLevel != $OFF) ? countLinesInFile($file) : (0, 0);
     TRACE "Finished calculating lines";
     my $counter = 0;
     my $refreshRate = (($totalLines / 10000) < 1) ? 1 : int($totalLines / 10000);
