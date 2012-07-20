@@ -1,27 +1,39 @@
-REQUIRMENTS: 
-	-Perl needs to be installed.
-	-A database management system needs to be installed. 
-        -DBIx::Class module needs to be installed. 
-        -DBIx::Class::Schema has a 'deploy' feature. 
-        -XML::LibXML::Reader         
-        -XML::Simple needs to be installed.
-        -XML::LibXML::SAX or XML::SAX   # Useing these two modules with XML::Simple
-        -XML::SAX::ParserFactory        # makes things run faster but it hasn't been implemented. 
-        -Log::Log4perl::Appender::File  # For logging features
-
-INSTALLATION:
+INSTALLATION & REQUIREMENTS:
 -Ubuntu 12.04 LTS
-    Libxml2-dev and libxml2 are c libraries that are needed by XML::LibXML::Reader. Or you will have issues.
+    0) Install your favorite database management system. We would recommend MySQL since it has been tested with bulkwhois2database.pl. 
+    1) Libxml2-dev and libxml2 are c libraries that are needed by XML::LibXML::Reader. Or you will have issues.
         a) sudo apt-get install libxml2-dev 
         b) sudo apt-get install libxml2
-    Once the libraries are installed then install libxml-libxml-perl to install XML::LibXML::Reader. Or
-    you could simply intall the module via cpan.
-        c) sudo apt-get install libxml-libxml-perl
-    Another library that may be needed is zlib. I would recommend installing this library if you want to 
-    use other xml related modules.
-        d) sudo apt-get install zlib1g-dev
-    You will also need the DBIx::Class modules. 
-        e) cpan DBIx::Class.
+    2) Once the libraries are installed then install libxml-libxml-perl to install XML::LibXML::Reader. Or you could simply intall the module via cpan.
+        a) sudo apt-get install libxml-libxml-perl
+    3) The zlib library may be needed. The application seems to run fine without it.
+        a) sudo apt-get install zlib1g-dev
+    4) You will also need to install the following modules via cpan or any other means.
+        a) DBIx::Class
+        b) DBIx::Class::Schema
+        c) XML::LibXML::Reader
+        d) XML::Simple
+        e) XML::LibXML::SAX
+        f) XML::SAX
+        g) XML::SAX::ParserFactory
+        h) Log::Log4perl
+
+EXECUTION:
+    WARNING) Before running the script create the database you want to drop the xml file to. In this case we named ours 'BulkWhois'. If you don't create a database the application will crash.
+    WARNING) All previous tables in the database will be dropped. Create a backup first if needed.
+    You can either run the script by typing: 
+        1) 'perl ./bulkwhois2database.pl [arguments go here]'.
+        2) './bulkwhois2database.pl [arguments go here]' if the execute bit is set.
+    For usage information pass in the argument '--help'
+
+EXAMPLES:
+1) Run silently.
+    './bulkwhois2database.pl --file ~/Desktop/arin_db/arin_db.xml --dbms mysql --database BulkWhois --host localhost --port 3306 --user root --password 12345'
+2) Run and print to the screen.
+    './bulkwhois2database.pl --file ~/Desktop/arin_db/arin_db.xml --dbms mysql --database BulkWhois --host localhost --port 3306 --user root --password 12345 --verbose TRACE'
+3) Run and log to a file
+    './bulkwhois2database.pl --file ~/Desktop/arin_db/arin_db.xml --dbms mysql --database BulkWhois --host localhost --port 3306 --user root --password 12345 --verbose TRACE --log output.log'
+4) './bulkwhois2database.pl --help'
 
 OTHER TOOLS:
     Another usefull tool is dbicdump.pl. This script takes an existing database and dumps it into it into a set of modules that inherit from DBIx::Class::Schema and DBIx::Class::Core. This is the command I used on my test database. 
@@ -33,4 +45,4 @@ TODO:
     5) Add more advanced installation and running instructions to the readme.
     6) Pass verbosity veriable to other perl files. 
 
-EXECUTION:
+
