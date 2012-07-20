@@ -49,7 +49,7 @@ sub new {
     my $self->{ITEMS_PROCESSED} = 0;
     $self->{DEFAULT_ELEMENT_TEXT_KEY} = undef;
 
-    my $buffer = InsertManager::BufferManager->new(bufferSize => $bufferSize, schema => $schemaObj);
+    my $buffer = InsertManager::BufferManager->new(bufferSize => $bufferSize, schema => $schemaObj, logger => $logger);
     $self->{BUFFER} = $buffer;  #Stores the buffer object
     $self->{LOGGER} = $logger;    #Stores a logger object.
 
