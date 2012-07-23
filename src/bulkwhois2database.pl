@@ -316,10 +316,6 @@ EXAMPLE:
     
     Print the man page to the screen.
 
-=item B<-v NUM, --verbose NUM>
-    
-    Set the verbosity (debugging) level. This argument is optional. 
-
 =item B<-f FILE, --file FILE> 
     
     The name of the file that contains the bulkwhois xml data.
