@@ -1,10 +1,17 @@
+BRIEF DESCRIPTION
+    The "Arin XML Data to MySQL" project provides the tool to dump arin.net's bulkwhois XML file to any database. All the user needs to do is execute the perl script bulkwhois2sql.pl. For more information about the script read the manual in the "doc" folder. 
+
 INSTALLATION & REQUIREMENTS:
 -Ubuntu 12.04 LTS
-    1) Install the following libraries by running this command.
-        a) sudo apt-get install libxml2-dev libxml-libxml-perl zlib1g-dev 
-    2) Install the following perl modules by running this command.
+    1) Download the project with wget. 
+        a) wget https://github.com/McKizzle/Arin-XML-Data-to-MySQL/tarball/master -O BulkWhois2SQL.tar 
+    2) Now untar the file
+        a) tar -xvf BulkWhois2SQL.tar
+    3) Install the following libraries by running this command.
+        a) sudo apt-get install libxml2-dev libxml-libxml-perl zlib1g-dev build-essential 
+    4) Install the following perl modules by running this command.
         a) sudo cpan -f SQL::Translator DBIx::Class DBIx::Class::Schema XML::LibXML::Reader XML::Simple XML::LibXML::SAX XML::SAX XML::SAX::ParserFactory Log::Log4perl JSON  
-    3) Install your favorite database management system. We would recommend MySQL since it has been tested with bulkwhois2database.pl. 
+    5) Install your favorite database management system. We would recommend MySQL since it has been tested with bulkwhois2database.pl. 
         a) sudo apt-get install mysql-server
 
 EXECUTION:
@@ -29,7 +36,7 @@ OTHER TOOLS:
     -perl dbicdump.pl -o dump_directory=oldbulkwhoisdump -o components='["InflateColumn::DateTime"]' MyApp::Schema dbi:mysql:arin root 12345
    
 TODO:
-    2) See if project can be added into the Arin project community.
-    4) Check for unexpexted elements. Log it to a file.
-
+    1) See if project can be added into the Arin project community.
+    2) Check for unexpexted elements. Log it to a file.
+    3) Add documentation explaning the purpose of this script. 
 
