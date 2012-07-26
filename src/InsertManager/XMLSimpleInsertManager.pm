@@ -75,7 +75,7 @@ sub parseXML {
     my $xmlElementName = shift;
 
     if(!defined $self->{DEFAULT_ELEMENT_TEXT_KEY}) {
-        die "Please set the ContentKey for XMLin by calling the method defaultElementTextKey and setting a value\n";
+        die "Please set the ContentKey for XMLin by calling the method defaultElementTextKey and setting a value. The value needs to be a string.";
     }
     
     #Use XML::Simple to load each element into memory directly.
@@ -125,7 +125,7 @@ sub addRowToBuffer {
             $self->log->error((Dumper $key, $value));
             $self->log->error("Unable to find a function that can handle the hash you passed in.");
             $self->log->error("Items Processed: ", $self->{ITEMS_PROCESSED});
-            if($self->log->is_error()) {
+            if($self->log->is_error() && !($self->log->is_warn())) {
                 $self->log->error("Application exiting at ", (caller(0))[3]);
                 print "Application died. Check log\n";
                 exit;
@@ -136,9 +136,14 @@ sub addRowToBuffer {
     }
 }#END addRowToBuffer
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Takes in a hash from XML::Simple::XMLin and converts it 
 # into a hash that can used by DBIx::Class::Schema::populate.
+# 1) Make sure that there elements in the simple hash that is not in any 
+#   of the mappings. Only do this if --verbosity DEBUG is used.
+# 2) Only work on the elements that are leaves.
+# 3) Go through the elements that contain child elements and call 
+#   parsingFunctionChooser to handle them.
 #
 #   @dependency Mappings.pm
 #
@@ -147,7 +152,8 @@ sub addRowToBuffer {
 #   @param the corresponding table to parse the return hash to.
 #   @param the name of the element being parsed.
 #
-#   @return a hash that can be used by the populate method in DBIx::Class::Schema object.
+#   @return a hash that can be used by the populate method in 
+#       DBIx::Class::Schema object.
 sub simpleHashForRowHash {
     my $self = shift;
     my $rowToPush = shift;
@@ -155,12 +161,21 @@ sub simpleHashForRowHash {
     my $element = shift;
     
     #TODO Make sure that there are no elements in xml that are not defined in the mappings.
+    foreach my $element (keys %$rowToPush) {
+        if(!defined($XML_TO_COLUMN_MAPPINGS->{$element})) {
+            $self->log->debug("$element was not found in the XML_TO_COLUMNS_MAPPINGS. Please update Mappings.pm.");
+            if($self->log->is_debug() && !($self->log-is_trace())) {
+                die "There has been a parsing error. Refer to the log for more information\n";
+            }
+        }
+    } 
 
     my %tmpHash = ();
     #parse all of the simple elements in the hash.
     foreach(@{$TABLES->{$table}}) {
         my $corresXMLElement = ${$COLUMN_TO_XML_MAPPINGS->{$table}}{$_}; #Get the column that corresponds to the xml element.
 
+        #Only work on the items that contain a string.
         if(!$ELEMENTS_THAT_NEED_EXTRA_PARSING->{$element}->{$corresXMLElement}) {
             $tmpHash{$_} = $rowToPush->{$corresXMLElement};
         }

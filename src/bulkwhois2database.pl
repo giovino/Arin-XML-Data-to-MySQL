@@ -79,8 +79,6 @@ elsif($args->{'verbose'}) {
 else {
     Log::Log4perl->easy_init($OFF);
 }
-#$logger->log($TRACE => "Woo hoo I did a trace with log4perl! self->patOnBack();");
-
 
 if (($numArgs == 0) && (-t STDIN)) {
     pod2usage("$0: Incorrect usage. Use the --help arguement for help"); 
